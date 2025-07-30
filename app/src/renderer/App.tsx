@@ -7,6 +7,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import ScrapeForm from './components/ScrapeForm';
+import AutomationTest from './components/AutomationTest';
+import DiveTest from './components/DiveTest';
 import JobsList from './components/JobsList';
 import Results from './components/Results';
 
@@ -110,6 +112,8 @@ const App: React.FC = () => {
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/scrape" element={<ScrapeForm />} />
+                <Route path="/automation" element={<AutomationTest />} />
+                <Route path="/dive" element={<DiveTest />} />
                 <Route path="/jobs" element={<JobsList />} />
                 <Route path="/results/:jobId?" element={<Results />} />
               </Routes>

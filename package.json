@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "A powerful web scraper with Electron GUI and Express API backend",
   "private": true,
+  "main": "./app/dist/main.js",
   "workspaces": [
     "api",
     "app"
@@ -14,7 +15,7 @@
     "build": "npm run build --workspace=api && npm run build --workspace=app",
     "build:api": "npm run build --workspace=api",
     "build:app": "npm run build --workspace=app",
-    "start": "npm run start --workspace=app",
+    "start": "npm run build:app && electron ./app/dist/main.js",
     "clean": "rimraf api/dist app/dist",
     "postinstall": "npm run build:api"
   },

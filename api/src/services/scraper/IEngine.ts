@@ -60,3 +60,17 @@ export interface EngineConfig {
   retries?: number;
   cache?: boolean;
 }
+
+export interface CDPTarget {
+  id: string;
+  title: string;
+  type: string;
+  url: string;
+  webSocketDebuggerUrl?: string;
+}
+
+// Generic CDP response
+export interface CDPResponse {
+  id: string;
+  [key: string]: any;
+}

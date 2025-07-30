@@ -6,7 +6,8 @@ import { pathToFileURL } from 'url';
 class WebCrawlerApp {
   private mainWindow: BrowserWindow | null = null;
   private apiProcess: ChildProcess | null = null;
-  private readonly isDev = process.env.NODE_ENV === 'development';
+  // Determine development mode: either explicit env or not packaged
+  private readonly isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
   private readonly apiPort = 3001;
 
   constructor() {
@@ -16,7 +17,10 @@ class WebCrawlerApp {
   private setupApp(): void {
     // Handle app ready
     app.whenReady().then(() => {
-      this.startApiServer();
+      // Only start API server when packaged (production)
+      if (app.isPackaged) {
+        this.startApiServer();
+      }
       this.createMainWindow();
       this.setupMenu();
       this.setupIpcHandlers();
@@ -100,9 +104,10 @@ class WebCrawlerApp {
     });
 
     // Load the React app
-    const startUrl = this.isDev 
-      ? 'http://localhost:3000'
-      : pathToFileURL(join(__dirname, '../build/index.html')).href;
+    // Load React app: use dev server in development, static files in production
+    const startUrl = app.isPackaged
+      ? pathToFileURL(join(__dirname, '../build/index.html')).href
+      : 'http://localhost:3000';
 
     this.mainWindow.loadURL(startUrl);
 

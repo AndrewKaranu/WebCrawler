@@ -1,27 +1,58 @@
 import { IEngine, EngineCapabilities, EngineConfig } from './IEngine';
 import { ScrapeOptions, EngineResult } from '../../models/index';
+import { SpiderEngine } from './SpiderEngine';
 
 /**
  * Factory for creating and managing scraping engines
  */
 export class EngineFactory {
   private static engines = new Map<string, IEngine>();
-  private static initialized = new Set<string>();
+  private static spiderEngineInstance: SpiderEngine | null = null;
 
   /**
-   * Get an engine instance by name
+   * Get an engine instance by name - uses singleton for SpiderEngine
    */
   static async getEngine(engineName: string, config?: EngineConfig): Promise<IEngine> {
-    const cacheKey = `${engineName}-${JSON.stringify(config || {})}`;
-    
-    if (this.engines.has(cacheKey)) {
-      return this.engines.get(cacheKey)!;
-    }
+    switch (engineName.toLowerCase()) {
+      case 'spider':
+      case 'playwright':
+        // Use singleton SpiderEngine instance
+        if (!this.spiderEngineInstance) {
+          this.spiderEngineInstance = new SpiderEngine();
+          await this.spiderEngineInstance.initialize(config);
+        }
+        return this.spiderEngineInstance;
 
-    const engine = await this.createEngine(engineName, config);
-    this.engines.set(cacheKey, engine);
-    
-    return engine;
+      default:
+        // For other engines, use the old caching mechanism
+        const cacheKey = `${engineName}-${JSON.stringify(config || {})}`;
+        
+        if (this.engines.has(cacheKey)) {
+          return this.engines.get(cacheKey)!;
+        }
+
+        const engine = await this.createEngine(engineName, config);
+        this.engines.set(cacheKey, engine);
+        
+        return engine;
+    }
+  }
+
+  /**
+   * Get the singleton SpiderEngine instance
+   */
+  static getSpiderEngine(): SpiderEngine | null {
+    return this.spiderEngineInstance;
+  }
+
+  /**
+   * Clear the SpiderEngine singleton (useful for testing or restart)
+   */
+  static async clearSpiderEngine(): Promise<void> {
+    if (this.spiderEngineInstance) {
+      await this.spiderEngineInstance.cleanup();
+      this.spiderEngineInstance = null;
+    }
   }
 
   /**
@@ -29,9 +60,12 @@ export class EngineFactory {
    */
   private static async createEngine(engineName: string, config?: EngineConfig): Promise<IEngine> {
     switch (engineName.toLowerCase()) {
+      case 'spider':
       case 'playwright':
-        // For now, return a mock engine - we'll implement these next
-        return this.createMockEngine('playwright');
+        // Use SpiderEngine for both spider and playwright requests
+        const spiderEngine = new SpiderEngine();
+        await spiderEngine.initialize(config);
+        return spiderEngine;
 
       case 'selenium':
         return this.createMockEngine('selenium');
@@ -43,7 +77,10 @@ export class EngineFactory {
         return this.createMockEngine('cache');
 
       default:
-        throw new Error(`Unknown engine: ${engineName}`);
+        // Default to SpiderEngine
+        const defaultEngine = new SpiderEngine();
+        await defaultEngine.initialize(config);
+        return defaultEngine;
     }
   }
 
@@ -155,13 +192,16 @@ export class EngineFactory {
    * Cleanup all engine instances
    */
   static async cleanup(): Promise<void> {
+    // Cleanup singleton SpiderEngine
+    await this.clearSpiderEngine();
+    
+    // Cleanup other engines
     const cleanupPromises = Array.from(this.engines.values()).map(engine => 
       engine.cleanup().catch(console.error)
     );
     
     await Promise.all(cleanupPromises);
     this.engines.clear();
-    this.initialized.clear();
   }
 
   /**

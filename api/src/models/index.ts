@@ -3,7 +3,7 @@ import { z } from 'zod';
 // Base scraping options
 export const ScrapeOptionsSchema = z.object({
   url: z.string().url(),
-  engine: z.enum(['playwright', 'selenium', 'http', 'cache']).default('playwright'),
+  engine: z.enum(['spider', 'playwright', 'selenium', 'http', 'cache']).default('spider'),
   waitFor: z.number().min(0).max(30000).optional(),
   timeout: z.number().min(1000).max(120000).default(30000),
   headers: z.record(z.string()).optional(),
