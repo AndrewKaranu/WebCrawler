@@ -1,0 +1,31 @@
+{
+  "name": "electron-scraper",
+  "version": "1.0.0",
+  "description": "A powerful web scraper with Electron GUI and Express API backend",
+  "private": true,
+  "workspaces": [
+    "api",
+    "app"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:app\"",
+    "dev:api": "npm run dev --workspace=api",
+    "dev:app": "npm run dev --workspace=app",
+    "build": "npm run build --workspace=api && npm run build --workspace=app",
+    "build:api": "npm run build --workspace=api",
+    "build:app": "npm run build --workspace=app",
+    "start": "npm run start --workspace=app",
+    "clean": "rimraf api/dist app/dist",
+    "postinstall": "npm run build:api"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "concurrently": "^8.0.0",
+    "rimraf": "^5.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
