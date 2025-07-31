@@ -195,23 +195,7 @@ DELETE /api/jobs/:jobId             - Cancel background job
 
 ## Development
 
-### Project Structure
-```
-WebCrawler/
-├── api/                 # Express backend
-│   ├── src/
-│   │   ├── controllers/ # Request handlers
-│   │   ├── services/    # Business logic
-│   │   ├── models/      # Data models
-│   │   └── routes.ts    # API routing
-│   └── data/           # Persistent storage
-├── app/                # Electron frontend
-│   ├── src/
-│   │   ├── main.ts     # Electron main process
-│   │   ├── preload.ts  # Preload script
-│   │   └── renderer/   # React UI components
-│   └── dist/          # Built application
-└── package.json       # Workspace configuration
+
 ```
 
 ### Development Commands
