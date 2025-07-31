@@ -261,4 +261,68 @@ export class DiveController {
       });
     }
   }
+
+  /**
+   * Get all saved sitemaps
+   * GET /api/dive/sitemaps
+   */
+  async getAllSitemaps(req: Request, res: Response): Promise<void> {
+    try {
+      const sitemaps = await this.diveService.getAllSitemaps();
+      console.log(`Retrieved ${sitemaps.length} sitemaps`);
+      
+      res.json({
+        success: true,
+        data: sitemaps,
+        count: sitemaps.length
+      });
+    } catch (error) {
+      console.error('Error retrieving sitemaps:', error);
+      res.status(500).json({
+        success: false,
+        errors: ['Internal server error while retrieving sitemaps'],
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+  
+  /**
+   * Get a specific sitemap by ID
+   * GET /api/dive/sitemaps/:id
+   */
+  async getSitemapById(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      
+      if (!id) {
+        res.status(400).json({
+          success: false,
+          errors: ['Sitemap ID is required'],
+        });
+        return;
+      }
+      
+      const sitemapEntry = await this.diveService.getSitemapById(id);
+      
+      if (!sitemapEntry) {
+        res.status(404).json({
+          success: false,
+          errors: [`Sitemap with ID ${id} not found`],
+        });
+        return;
+      }
+      
+      res.json({
+        success: true,
+        data: sitemapEntry
+      });
+    } catch (error) {
+      console.error(`Error retrieving sitemap with ID ${req.params.id}:`, error);
+      res.status(500).json({
+        success: false,
+        errors: ['Internal server error while retrieving sitemap'],
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
 }

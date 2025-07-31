@@ -7,8 +7,29 @@ import { routes } from './routes';
 
 // Import and start the simple job worker (no Redis required)
 import './services/JobWorker';
+import { initStorage } from './services/PersistentStorage';
+import { jobQueue } from './services/JobQueue';
+import { initCorpusStore } from './controllers/corpus';
 
 const app = express();
+
+// Initialize storage and load saved data
+(async () => {
+  try {
+    // Initialize persistent storage
+    await initStorage();
+    
+    // Initialize job queue from storage
+    await jobQueue.initialize();
+    
+    // Initialize corpus store from storage
+    await initCorpusStore();
+    
+    console.log('🚀 Persistent storage initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize persistent storage:', error);
+  }
+})();
 const PORT = process.env['PORT'] || 3001;
 
 // Security middleware
@@ -37,6 +58,10 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Routes
 app.use('/api', routes);
+// Serve job and corpus files statically
+import path from 'path';
+app.use('/jobs', express.static(path.join(process.cwd(), 'data', 'jobs')));
+app.use('/corpus', express.static(path.join(process.cwd(), 'data', 'corpus')));
 
 // Health check endpoint
 app.get('/health', (req: express.Request, res: express.Response) => {

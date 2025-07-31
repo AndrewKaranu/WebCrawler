@@ -8,10 +8,12 @@ import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import ScrapeForm from './components/ScrapeForm';
 import MassScraperForm from './components/MassScraperForm';
+import ContentBrowser from './components/ContentBrowser';
 import AutomationTest from './components/AutomationTest';
 import DiveTest from './components/DiveTest';
 import JobsList from './components/JobsList';
 import Results from './components/Results';
+import CorpusManager from './components/CorpusManager';
 
 // Create dark theme
 const darkTheme = createTheme({
@@ -114,10 +116,12 @@ const App: React.FC = () => {
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/scrape" element={<ScrapeForm />} />
                 <Route path="/mass-scraper" element={<MassScraperForm />} />
+                <Route path="/content" element={<ContentBrowser />} />
                 <Route path="/automation" element={<AutomationTest />} />
                 <Route path="/dive" element={<DiveTest />} />
                 <Route path="/jobs" element={<JobsList />} />
                 <Route path="/results/:jobId?" element={<Results />} />
+                <Route path="/corpus" element={<CorpusManager />} />
               </Routes>
             </Container>
           </Box>

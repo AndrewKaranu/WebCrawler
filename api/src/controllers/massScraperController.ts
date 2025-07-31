@@ -5,13 +5,19 @@ export const massScraperController = {
   /**
    * Create a mass scrape batch
    * POST /api/mass-scrape
+   * 
+   * Can optionally create an associated corpus if createCorpus is set to true
    */
   createBatch: async (req: Request, res: Response) => {
     try {
       const request: MassScrapeRequest = {
         urls: req.body.urls,
         batchName: req.body.batchName,
-        options: req.body.options
+        options: req.body.options,
+        createCorpus: req.body.createCorpus,
+        corpusName: req.body.corpusName,
+        corpusDescription: req.body.corpusDescription,
+        corpusTags: req.body.corpusTags
       };
 
       // Validate request
@@ -180,7 +186,7 @@ export const massScraperController = {
    */
   createBatchFromDive: async (req: Request, res: Response) => {
     try {
-      const { diveJobId, selectedUrls, batchName, options } = req.body;
+      const { diveJobId, selectedUrls, batchName, options, createCorpus } = req.body;
 
       if (!diveJobId || !selectedUrls || !Array.isArray(selectedUrls)) {
         return res.status(400).json({
@@ -193,7 +199,8 @@ export const massScraperController = {
         diveJobId,
         selectedUrls,
         batchName,
-        options
+        options,
+        createCorpus
       );
 
       res.json({
@@ -203,6 +210,51 @@ export const massScraperController = {
     } catch (error) {
       console.error('Error creating batch from dive:', error);
       res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  },
+  
+  /**
+   * Create a corpus from an existing batch
+   * POST /api/corpus/from-batch/:batchId
+   */
+  createCorpusFromBatch: async (req: Request, res: Response) => {
+    console.log(`HTTP POST /api/corpus/from-batch/${req.params.batchId} called`);
+    try {
+      const { batchId } = req.params;
+      const { corpusName, corpusDescription, corpusTags } = req.body;
+      
+      const corpusId = await massScraperService.createCorpusFromBatch(
+        batchId, 
+        corpusName,
+        corpusDescription,
+        corpusTags
+      );
+      
+      if (!corpusId) {
+        return res.status(404).json({
+          success: false,
+          error: 'Batch not found or corpus creation failed'
+        });
+      }
+      
+      // Add batch results to the corpus
+      const success = await massScraperService.addBatchResultsToCorpus(batchId, corpusId);
+      
+      return res.json({
+        success: true,
+        data: { 
+          corpusId,
+          batchId,
+          resultsAdded: success 
+        },
+        message: `Corpus created from batch ${batchId}`
+      });
+    } catch (error) {
+      console.error('Error creating corpus from batch:', error);
+      return res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
       });

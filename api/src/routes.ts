@@ -4,13 +4,18 @@ import { mapController } from './controllers/map';
 import { searchController } from './controllers/search';
 import { transformController } from './controllers/transform';
 import { jobsController } from './controllers/jobs';
+import { cacheController } from './controllers/cache';
 import { DiveController } from './controllers/dive';
 import { massScraperController } from './controllers/massScraperController';
+import { massScraperService } from './services/MassScraperService';
+import { ContentController } from './controllers/content';
+import { corpusController } from './controllers/corpus';
 
 const router = express.Router();
 
 // Initialize controllers
 const diveController = new DiveController();
+const contentController = new ContentController();
 
 // Scraping endpoints
 router.post('/scrape', scrapeController.scrape);
@@ -33,6 +38,32 @@ router.get('/jobs', jobsController.listJobs);
 router.get('/jobs/:jobId', jobsController.getJob);
 router.delete('/jobs/:jobId', jobsController.deleteJob);
 
+// Cache management endpoints
+router.get('/cache/stats', cacheController.getStats);
+router.get('/cache/health', cacheController.healthCheck);
+router.delete('/cache/clear', cacheController.clearByPattern);
+router.delete('/cache/clear-all', cacheController.clearAll);
+router.post('/cache/warmup', cacheController.warmupCache);
+
+// Content management endpoints
+router.get('/content', contentController.getAllContent);
+router.get('/content/:id', contentController.getContentById);
+router.delete('/content/:id', contentController.deleteContent);
+router.post('/content/export', contentController.exportContent);
+router.get('/content/domains', contentController.getDomains);
+
+// Corpus management endpoints
+router.post('/corpus', corpusController.createCorpus);
+router.get('/corpus', corpusController.getAllCorpuses);
+router.get('/corpus/:corpusId', corpusController.getCorpusById);
+router.post('/corpus/:corpusId/content', corpusController.addContentFromMassScrape);
+router.get('/corpus/:corpusId/statistics', corpusController.getCorpusStatistics);
+router.post('/corpus/:corpusId/export', corpusController.exportCorpus);
+router.delete('/corpus/:corpusId', corpusController.deleteCorpus);
+
+// Create corpus from batch
+router.post('/corpus/from-batch/:batchId', massScraperController.createCorpusFromBatch);
+
 // Mass scraper endpoints
 router.post('/mass-scrape', massScraperController.createBatch);
 router.get('/mass-scrape', massScraperController.getAllBatches);
@@ -53,16 +84,18 @@ router.get('/engines', (req: express.Request, res: express.Response) => {
 // Test endpoint for SpiderEngine
 router.post('/test/spider', async (req: express.Request, res: express.Response) => {
   try {
-    const { url = 'https://example.com' } = req.body;
+    const { url = 'https://example.com', engine: engineType = 'spider', options = {} } = req.body;
     const { EngineFactory } = await import('./services/scraper/EngineFactory');
     
-    console.log(`Testing SpiderEngine with URL: ${url}`);
+    console.log(`Testing ${engineType} engine with URL: ${url}${options.bypassCache ? ' (bypass cache)' : ''}`);
     
-    const engine = await EngineFactory.getEngine('spider');
+    const engine = await EngineFactory.getEngine(engineType);
     const result = await engine.scrape({
       url,
-      engine: 'spider',
-      timeout: 15000,
+      engine: engineType,
+      timeout: options.timeout || 15000,
+      waitFor: options.waitForLoad,
+      bypassCache: options.bypassCache || false,
       screenshot: false,
       fullPage: false,
     });
@@ -143,7 +176,7 @@ router.post('/automate/restart-browser', async (req: express.Request, res: expre
     const { EngineFactory } = await import('./services/scraper/EngineFactory');
     
     // Clear the singleton and restart
-    await EngineFactory.clearSpiderEngine();
+    await EngineFactory.clearAllEngines();
     
     // Get a new instance (will initialize fresh)
     const engine = await EngineFactory.getEngine('spider');
@@ -566,5 +599,21 @@ router.get('/dive/progress/:jobId', diveController.getDiveProgress.bind(diveCont
 router.post('/dive/validate', diveController.validateDiveRequest.bind(diveController));
 router.get('/dive/config', diveController.getDiveConfig.bind(diveController));
 router.post('/dive/analyze', diveController.analyzeSitemap.bind(diveController));
+router.get('/dive/sitemaps', diveController.getAllSitemaps.bind(diveController));
+router.get('/dive/sitemaps/:id', diveController.getSitemapById.bind(diveController));
+
+// Corpus management endpoints (Results Corpus)
+router.post('/corpus', corpusController.createCorpus);
+router.get('/corpus', corpusController.getAllCorpuses);
+router.get('/corpus/:corpusId', corpusController.getCorpusById);
+router.post('/corpus/:corpusId/content/mass-scrape', corpusController.addContentFromMassScrape);
+// Route to create corpus from an existing mass scrape batch
+router.post('/corpus/from-batch/:batchId', massScraperController.createCorpusFromBatch);
+router.post('/corpus/:corpusId/sitemap/dive', corpusController.addSitemapFromDive);
+router.post('/corpus/:corpusId/export', corpusController.exportCorpus);
+router.delete('/corpus/:corpusId', corpusController.deleteCorpus);
+router.get('/corpus/:corpusId/statistics', corpusController.getCorpusStatistics);
+router.post('/corpus/from-mass-scrape', corpusController.createCorpusFromMassScrape);
+router.post('/corpus/from-dive', corpusController.createCorpusFromDive);
 
 export { router as routes };

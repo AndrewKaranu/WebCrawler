@@ -1,64 +1,97 @@
 import { IEngine, EngineCapabilities, EngineConfig } from './IEngine';
 import { ScrapeOptions, EngineResult } from '../../models/index';
 import { SpiderEngine } from './SpiderEngine';
+import { CacheEngine } from './CacheEngine';
 
 /**
- * Factory for creating and managing scraping engines
+ * Factory for creating and managing scraping engines with dedicated caching layer
  */
 export class EngineFactory {
   private static engines = new Map<string, IEngine>();
   private static spiderEngineInstance: SpiderEngine | null = null;
+  private static cacheEngineInstance: CacheEngine | null = null;
 
   /**
-   * Get an engine instance by name - uses singleton for SpiderEngine
+   * Get an engine instance by name with caching layer
+   * All engines are wrapped by CacheEngine for lightning-fast performance
    */
   static async getEngine(engineName: string, config?: EngineConfig): Promise<IEngine> {
-    switch (engineName.toLowerCase()) {
-      case 'spider':
-      case 'playwright':
-        // Use singleton SpiderEngine instance
-        if (!this.spiderEngineInstance) {
-          this.spiderEngineInstance = new SpiderEngine();
-          await this.spiderEngineInstance.initialize(config);
-        }
-        return this.spiderEngineInstance;
-
-      default:
-        // For other engines, use the old caching mechanism
-        const cacheKey = `${engineName}-${JSON.stringify(config || {})}`;
-        
-        if (this.engines.has(cacheKey)) {
-          return this.engines.get(cacheKey)!;
-        }
-
-        const engine = await this.createEngine(engineName, config);
-        this.engines.set(cacheKey, engine);
-        
-        return engine;
+    // Always return the cached version of any engine
+    const cacheKey = `cached-${engineName}-${JSON.stringify(config || {})}`;
+    
+    if (this.engines.has(cacheKey)) {
+      return this.engines.get(cacheKey)!;
     }
+
+    // Create the underlying engine first
+    const underlyingEngine = await this.createUnderlyingEngine(engineName, config);
+    
+    // Wrap it with CacheEngine for lightning-fast caching
+    const cachedEngine = new CacheEngine(underlyingEngine);
+    await cachedEngine.initialize(config);
+    
+    // Cache the engine instance
+    this.engines.set(cacheKey, cachedEngine);
+    
+    console.log(`🚀 Created cached ${engineName} engine`);
+    return cachedEngine;
   }
 
   /**
-   * Get the singleton SpiderEngine instance
+   * Get the raw underlying engine without caching (for internal use)
    */
-  static getSpiderEngine(): SpiderEngine | null {
-    return this.spiderEngineInstance;
+  static async getUnderlyingEngine(engineName: string, config?: EngineConfig): Promise<IEngine> {
+    return await this.createUnderlyingEngine(engineName, config);
   }
 
   /**
-   * Clear the SpiderEngine singleton (useful for testing or restart)
+   * Get the singleton SpiderEngine instance (cached)
    */
-  static async clearSpiderEngine(): Promise<void> {
+  static async getCachedSpiderEngine(): Promise<CacheEngine> {
+    if (!this.cacheEngineInstance) {
+      // Create underlying SpiderEngine
+      if (!this.spiderEngineInstance) {
+        this.spiderEngineInstance = new SpiderEngine();
+        await this.spiderEngineInstance.initialize();
+      }
+      
+      // Wrap with CacheEngine
+      this.cacheEngineInstance = new CacheEngine(this.spiderEngineInstance);
+      await this.cacheEngineInstance.initialize();
+    }
+    
+    return this.cacheEngineInstance;
+  }
+
+  /**
+   * Clear all engine instances
+   */
+  static async clearAllEngines(): Promise<void> {
+    if (this.cacheEngineInstance) {
+      await this.cacheEngineInstance.cleanup();
+      this.cacheEngineInstance = null;
+    }
+    
     if (this.spiderEngineInstance) {
       await this.spiderEngineInstance.cleanup();
       this.spiderEngineInstance = null;
     }
+    
+    // Cleanup all other engines
+    const cleanupPromises = Array.from(this.engines.values()).map(engine => 
+      engine.cleanup().catch(console.error)
+    );
+    
+    await Promise.all(cleanupPromises);
+    this.engines.clear();
+    
+    console.log('🧹 All engines cleared');
   }
 
   /**
-   * Create a new engine instance
+   * Create the underlying engine without caching wrapper
    */
-  private static async createEngine(engineName: string, config?: EngineConfig): Promise<IEngine> {
+  private static async createUnderlyingEngine(engineName: string, config?: EngineConfig): Promise<IEngine> {
     switch (engineName.toLowerCase()) {
       case 'spider':
       case 'playwright':
@@ -73,11 +106,8 @@ export class EngineFactory {
       case 'http':
         return this.createMockEngine('http');
 
-      case 'cache':
-        return this.createMockEngine('cache');
-
       default:
-        // Default to SpiderEngine
+        // Default to SpiderEngine for unknown engines
         const defaultEngine = new SpiderEngine();
         await defaultEngine.initialize(config);
         return defaultEngine;
@@ -101,45 +131,53 @@ export class EngineFactory {
         stealth: name === 'playwright',
       },
       async initialize() {
-        // Mock initialization
+        console.log(`🚀 Mock ${name} engine initialized`);
       },
       async scrape(options: ScrapeOptions): Promise<EngineResult> {
-        // Mock scraping result
+        // Simulate realistic delay for mock
+        await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
+        
         return {
           url: options.url,
-          html: '<html><body><h1>Mock Result</h1></body></html>',
-          text: 'Mock Result',
-          title: 'Mock Page',
-          meta: {},
-          links: [],
-          images: [],
-          loadTime: 1000,
+          html: `<html><body><h1>Mock ${name} Result</h1><p>This is a mock result from ${name} engine for ${options.url}</p></body></html>`,
+          text: `Mock ${name} Result\nThis is a mock result from ${name} engine for ${options.url}`,
+          title: `Mock ${name} Page - ${options.url}`,
+          meta: { 
+            'generator': `${name}-engine`,
+            'mock': 'true'
+          },
+          links: [
+            { href: `${options.url}/link1`, text: 'Mock Link 1' },
+            { href: `${options.url}/link2`, text: 'Mock Link 2' }
+          ],
+          images: [
+            { src: `${options.url}/image1.jpg`, alt: 'Mock Image 1' }
+          ],
+          loadTime: 500 + Math.random() * 1000,
           statusCode: 200,
-          headers: {},
+          headers: { 'content-type': 'text/html' },
           timestamp: new Date(),
         };
       },
       async scrapeMultiple(urls: string[], options: ScrapeOptions): Promise<EngineResult[]> {
-        // Mock batch scraping
-        return urls.map(url => ({
-          url,
-          html: '<html><body><h1>Mock Result</h1></body></html>',
-          text: 'Mock Result',
-          title: 'Mock Page',
-          meta: {},
-          links: [],
-          images: [],
-          loadTime: 1000,
-          statusCode: 200,
-          headers: {},
-          timestamp: new Date(),
-        }));
+        // Mock batch scraping with realistic delays
+        const results: EngineResult[] = [];
+        
+        for (const url of urls) {
+          const result = await this.scrape({ ...options, url });
+          results.push(result);
+          
+          // Small delay between requests
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        return results;
       },
       async healthCheck(): Promise<boolean> {
         return true;
       },
       async cleanup(): Promise<void> {
-        // Mock cleanup
+        console.log(`🧹 Mock ${name} engine cleaned up`);
       },
     };
   }
@@ -147,8 +185,18 @@ export class EngineFactory {
   /**
    * Get available engines and their capabilities
    */
-  static getAvailableEngines(): Record<string, EngineCapabilities> {
+  static getAvailableEngines(): Record<string, EngineCapabilities & { cached: boolean }> {
     return {
+      spider: {
+        javascript: true,
+        cookies: true,
+        screenshots: true,
+        userInteraction: true,
+        headless: true,
+        proxy: true,
+        stealth: true,
+        cached: true, // All engines now have caching
+      },
       playwright: {
         javascript: true,
         cookies: true,
@@ -157,6 +205,7 @@ export class EngineFactory {
         headless: true,
         proxy: true,
         stealth: true,
+        cached: true,
       },
       selenium: {
         javascript: true,
@@ -166,6 +215,7 @@ export class EngineFactory {
         headless: true,
         proxy: true,
         stealth: false,
+        cached: true,
       },
       http: {
         javascript: false,
@@ -175,15 +225,7 @@ export class EngineFactory {
         headless: true,
         proxy: true,
         stealth: false,
-      },
-      cache: {
-        javascript: false,
-        cookies: false,
-        screenshots: false,
-        userInteraction: false,
-        headless: true,
-        proxy: false,
-        stealth: false,
+        cached: true,
       },
     };
   }
@@ -192,16 +234,58 @@ export class EngineFactory {
    * Cleanup all engine instances
    */
   static async cleanup(): Promise<void> {
-    // Cleanup singleton SpiderEngine
-    await this.clearSpiderEngine();
+    await this.clearAllEngines();
+  }
+
+  /**
+   * Get cache statistics from all engines
+   */
+  static async getAllCacheStats(): Promise<Record<string, any>> {
+    const stats: Record<string, any> = {};
     
-    // Cleanup other engines
-    const cleanupPromises = Array.from(this.engines.values()).map(engine => 
-      engine.cleanup().catch(console.error)
-    );
+    for (const [key, engine] of this.engines.entries()) {
+      if (engine instanceof CacheEngine) {
+        try {
+          stats[key] = await engine.getCacheStats();
+        } catch (error) {
+          stats[key] = { error: 'Failed to get stats' };
+        }
+      }
+    }
     
-    await Promise.all(cleanupPromises);
-    this.engines.clear();
+    return stats;
+  }
+
+  /**
+   * Clear cache for all engines
+   */
+  static async clearAllCaches(pattern?: string): Promise<Record<string, any>> {
+    const results: Record<string, any> = {};
+    
+    for (const [key, engine] of this.engines.entries()) {
+      if (engine instanceof CacheEngine) {
+        try {
+          results[key] = await engine.clearCache(pattern);
+        } catch (error) {
+          results[key] = { error: 'Failed to clear cache' };
+        }
+      }
+    }
+    
+    return results;
+  }
+
+  /**
+   * Warm up cache for specific engine
+   */
+  static async warmupEngine(engineName: string, urls: string[], options: ScrapeOptions): Promise<any> {
+    const engine = await this.getEngine(engineName);
+    
+    if (engine instanceof CacheEngine) {
+      return await engine.warmupCache(urls, options);
+    }
+    
+    throw new Error(`Engine ${engineName} does not support cache warmup`);
   }
 
   /**
@@ -225,6 +309,6 @@ export class EngineFactory {
 
     // Sort by score and return the best match
     scores.sort((a, b) => b.score - a.score);
-    return scores[0]?.name || 'playwright'; // Default to playwright
+    return scores[0]?.name || 'spider'; // Default to spider (was playwright)
   }
 }

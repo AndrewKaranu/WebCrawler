@@ -127,3 +127,7 @@ config/local.json
 *.old
 *.orig
 *~
+
+# Application data
+api/data/
+api/cache/

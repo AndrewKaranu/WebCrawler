@@ -1,5 +1,7 @@
 import { jobQueue } from './JobQueue';
 import { SpiderEngine } from './scraper/SpiderEngine/index';
+import { EngineFactory } from './scraper/EngineFactory';
+import { jobCacheService } from './JobCacheService';
 import { DiveRequest } from './DiveService';
 
 let engine: SpiderEngine | null = null;
@@ -13,11 +15,43 @@ async function getSpiderEngine(): Promise<SpiderEngine> {
   return engine;
 }
 
-// Register job processors
+// Initialize job cache service
+async function initializeJobCache(): Promise<void> {
+  await jobCacheService.initialize();
+  console.log('🚀 Job cache service initialized');
+}
+
+// Initialize on module load
+initializeJobCache().catch(console.error);
+
+// Register job processors with cache-first strategy
 jobQueue.process('diveFull', async (job) => {
-  console.log(`Processing dive job ${job.id}`);
+  console.log(`🔍 Processing dive job ${job.id} with cache check`);
   
   const { request } = job.data as { request: DiveRequest };
+  
+  // Check cache first for dive results
+  const cachedDiveResult = await jobCacheService.checkDiveJobCache(request.url);
+  if (cachedDiveResult) {
+    console.log(`🚀 Cache HIT for dive job: ${request.url}`);
+    
+    await job.updateProgress({ 
+      processed: cachedDiveResult.pages?.length || 0, 
+      queued: 0, 
+      visited: cachedDiveResult.pages?.length || 0,
+      status: 'Dive completed from cache'
+    });
+    
+    return {
+      success: true,
+      url: request.url,
+      pagesFound: cachedDiveResult.pages?.length || 0,
+      sitemap: cachedDiveResult,
+      fromCache: true
+    };
+  }
+  
+  console.log(`💨 Cache MISS for dive job: ${request.url} - performing fresh dive`);
   const spiderEngine = await getSpiderEngine();
   
   // Update initial progress
@@ -25,7 +59,7 @@ jobQueue.process('diveFull', async (job) => {
     processed: 0, 
     queued: 1, 
     visited: 0,
-    status: 'Starting dive...'
+    status: 'Starting fresh dive...'
   });
   
   try {
@@ -69,6 +103,21 @@ jobQueue.process('diveFull', async (job) => {
     const result = await divePromise;
     clearInterval(progressInterval);
     
+    // Cache the dive result for future use
+    await jobCacheService.cacheDiveJobResult(request.url, result);
+    console.log(`💾 Cached dive result for: ${request.url}`);
+    
+    // Create a sitemapId and store in DiveService
+    try {
+      const { DiveService } = require('./DiveService');
+      const diveService = new DiveService();
+      const sitemapId = `sitemap-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      diveService.saveSitemap(sitemapId, result, request.url);
+      console.log(`🗺️ Stored sitemap in DiveService with ID: ${sitemapId}`);
+    } catch (error) {
+      console.error('Error storing sitemap in DiveService:', error);
+    }
+    
     await job.updateProgress({ 
       processed: result.pages.length, 
       queued: 0, 
@@ -76,17 +125,18 @@ jobQueue.process('diveFull', async (job) => {
       status: 'Dive completed successfully'
     });
     
-    console.log(`Dive completed for ${request.url}. Found ${result.pages.length} pages.`);
+    console.log(`✅ Dive completed for ${request.url}. Found ${result.pages.length} pages.`);
     
     return {
       success: true,
       url: request.url,
       pagesFound: result.pages.length,
-      sitemap: result
+      sitemap: result,
+      fromCache: false
     };
     
   } catch (error) {
-    console.error(`Dive failed for ${request.url}:`, error);
+    console.error(`❌ Dive failed for ${request.url}:`, error);
     await job.updateProgress({ 
       status: `Dive failed: ${error instanceof Error ? error.message : 'Unknown error'}`
     });
@@ -145,10 +195,32 @@ jobQueue.process('divePreview', async (job) => {
 });
 
 jobQueue.process('scrapePage', async (job) => {
-  console.log(`Processing scrape job ${job.id}`);
+  console.log(`🔍 Processing scrape job ${job.id} with cache check`);
   
   const { url, options } = job.data;
-  const spiderEngine = await getSpiderEngine();
+  
+  // Check cache first for scrape results
+  const cachedResult = await jobCacheService.checkScrapeJobCache({ url, options });
+  if (cachedResult) {
+    console.log(`🚀 Cache HIT for scrape job: ${url}`);
+    
+    await job.updateProgress({ 
+      processed: 1,
+      status: 'Scrape completed from cache'
+    });
+    
+    return {
+      success: true,
+      url,
+      result: cachedResult,
+      fromCache: true
+    };
+  }
+  
+  console.log(`💨 Cache MISS for scrape job: ${url} - performing fresh scrape`);
+  
+  // Use the caching engine instead of direct spider engine
+  const cacheEngine = await EngineFactory.getEngine('spider');
   
   await job.updateProgress({ 
     status: 'Scraping page...',
@@ -156,7 +228,7 @@ jobQueue.process('scrapePage', async (job) => {
   });
   
   try {
-    const result = await spiderEngine.scrape({
+    const result = await cacheEngine.scrape({
       url,
       ...options
     });
@@ -166,14 +238,17 @@ jobQueue.process('scrapePage', async (job) => {
       status: 'Scrape completed'
     });
     
+    console.log(`✅ Scrape completed for ${url}`);
+    
     return {
       success: true,
       url,
-      result
+      result,
+      fromCache: false
     };
     
   } catch (error) {
-    console.error(`Scrape failed for ${url}:`, error);
+    console.error(`❌ Scrape failed for ${url}:`, error);
     await job.updateProgress({ 
       status: `Scrape failed: ${error instanceof Error ? error.message : 'Unknown error'}`
     });
@@ -181,4 +256,4 @@ jobQueue.process('scrapePage', async (job) => {
   }
 });
 
-console.log('Simple job queue workers registered and ready...');
+console.log('🚀 Cache-enabled job queue workers registered and ready...');

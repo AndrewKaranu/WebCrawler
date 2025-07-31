@@ -46,6 +46,7 @@ interface BatchStatus {
   };
   urls: string[];
   createdAt: string;
+  corpusId?: string;
 }
 
 const MassScraperForm: React.FC<MassScraperFormProps> = ({ onBatchCreated }) => {
@@ -60,10 +61,19 @@ const MassScraperForm: React.FC<MassScraperFormProps> = ({ onBatchCreated }) => 
     userAgent: 'WebCrawler/1.0'
   });
   
+  // Corpus creation options
+  const [createCorpus, setCreateCorpus] = useState(false);
+  const [corpusName, setCorpusName] = useState('');
+  const [corpusDescription, setCorpusDescription] = useState('');
+  const [corpusTag, setCorpusTag] = useState('');
+  const [corpusTags, setCorpusTags] = useState<string[]>([]);
+  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [activeBatches, setActiveBatches] = useState<BatchStatus[]>([]);
+  // Track which batches have been linked already
+  const [linkedBatches, setLinkedBatches] = useState<Set<string>>(new Set());
 
   const addUrlField = () => {
     setUrls([...urls, '']);
@@ -84,6 +94,17 @@ const MassScraperForm: React.FC<MassScraperFormProps> = ({ onBatchCreated }) => 
 
   const clearAllUrls = () => {
     setUrls(['']);
+  };
+  
+  const addCorpusTag = () => {
+    if (corpusTag.trim() !== '' && !corpusTags.includes(corpusTag)) {
+      setCorpusTags([...corpusTags, corpusTag.trim()]);
+      setCorpusTag('');
+    }
+  };
+  
+  const removeCorpusTag = (tag: string) => {
+    setCorpusTags(corpusTags.filter(t => t !== tag));
   };
 
   const validateUrls = (): boolean => {
@@ -131,7 +152,11 @@ const MassScraperForm: React.FC<MassScraperFormProps> = ({ onBatchCreated }) => 
         body: JSON.stringify({
           urls: validUrls,
           batchName: batchName || `Batch - ${new Date().toLocaleString()}`,
-          options
+          options,
+          createCorpus,
+          corpusName: createCorpus ? (corpusName || `Corpus for ${batchName || 'Batch'}`) : undefined,
+          corpusDescription: createCorpus ? (corpusDescription || 'Auto-generated corpus') : undefined,
+          corpusTags: createCorpus ? corpusTags : undefined
         }),
       });
 
@@ -147,6 +172,24 @@ const MassScraperForm: React.FC<MassScraperFormProps> = ({ onBatchCreated }) => 
         setUrls(['']);
         onBatchCreated?.(result.data.batchId);
         loadActiveBatches(); // Refresh the batch list
+        // If user requested corpus creation, populate it with batch results
+        if (createCorpus && result.data.batchId) {
+          try {
+            const batchId = result.data.batchId;
+            const url = `/api/corpus/from-batch/${batchId}`;
+            await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                corpusName: corpusName || `Corpus for ${batchName || batchId}`,
+                corpusDescription: corpusDescription || `Auto-generated corpus for batch ${batchId}`,
+                corpusTags
+              })
+            });
+          } catch (err) {
+            console.error('Error linking batch to corpus:', err);
+          }
+        }
       } else {
         setError(result.error || 'Failed to create batch');
       }
@@ -197,6 +240,24 @@ const MassScraperForm: React.FC<MassScraperFormProps> = ({ onBatchCreated }) => 
       console.error('Error deleting batch:', error);
     }
   };
+
+  // Monitor activeBatches and auto-link completed ones to corpus
+  React.useEffect(() => {
+    activeBatches.forEach(batch => {
+      if (batch.corpusId && batch.status === 'completed' && !linkedBatches.has(batch.id)) {
+        // call API to link batch results into corpus
+        fetch(`/api/corpus/from-batch/${batch.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        }).then(res => {
+          if (!res.ok) throw new Error('Linking failed');
+        }).catch(err => console.error('Auto-link batch to corpus failed:', err));
+        // mark as linked
+        setLinkedBatches(prev => new Set(prev).add(batch.id));
+      }
+    });
+  }, [activeBatches, linkedBatches]);
 
   // Load batches on component mount
   React.useEffect(() => {
@@ -334,6 +395,80 @@ const MassScraperForm: React.FC<MassScraperFormProps> = ({ onBatchCreated }) => 
               sx={{ width: 150 }}
             />
           </Box>
+          
+          <Divider sx={{ my: 3 }} />
+          
+          <Typography variant="h6" gutterBottom>
+            Corpus Options
+          </Typography>
+          
+          <FormControlLabel
+            control={
+              <Switch
+                checked={createCorpus}
+                onChange={(e) => setCreateCorpus(e.target.checked)}
+              />
+            }
+            label="Create Corpus from Results"
+          />
+          
+          {createCorpus && (
+            <Box sx={{ mt: 2 }}>
+              <TextField
+                fullWidth
+                label="Corpus Name (Optional)"
+                value={corpusName}
+                onChange={(e) => setCorpusName(e.target.value)}
+                margin="normal"
+                helperText="Leave blank to use batch name"
+              />
+              
+              <TextField
+                fullWidth
+                label="Corpus Description (Optional)"
+                value={corpusDescription}
+                onChange={(e) => setCorpusDescription(e.target.value)}
+                margin="normal"
+                multiline
+                rows={2}
+              />
+              
+              <Box sx={{ mt: 2, mb: 1 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Corpus Tags
+                </Typography>
+                
+                <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                  <TextField
+                    label="Add Tag"
+                    value={corpusTag}
+                    onChange={(e) => setCorpusTag(e.target.value)}
+                    size="small"
+                  />
+                  <Button 
+                    variant="outlined" 
+                    onClick={addCorpusTag}
+                    disabled={corpusTag.trim() === ''}
+                  >
+                    Add
+                  </Button>
+                </Box>
+                
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  {corpusTags.map((tag) => (
+                    <Chip 
+                      key={tag} 
+                      label={tag} 
+                      onDelete={() => removeCorpusTag(tag)}
+                      size="small"
+                    />
+                  ))}
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          <Divider sx={{ my: 3 }} />
 
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
@@ -413,9 +548,23 @@ const MassScraperForm: React.FC<MassScraperFormProps> = ({ onBatchCreated }) => 
                         />
                       </Box>
                       
-                      <Typography variant="caption" color="text.secondary">
-                        Created: {new Date(batch.createdAt).toLocaleString()}
-                      </Typography>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="caption" color="text.secondary">
+                          Created: {new Date(batch.createdAt).toLocaleString()}
+                        </Typography>
+                        
+                        {batch.corpusId && (
+                          <Chip
+                            label={`Corpus: ${batch.corpusId}`}
+                            color="primary"
+                            size="small"
+                            onClick={() => {
+                              // Navigate to corpus view
+                              window.location.href = `/#/corpus?id=${batch.corpusId}`;
+                            }}
+                          />
+                        )}
+                      </Box>
                     </Box>
                   </ListItem>
                   {index < activeBatches.length - 1 && <Divider />}

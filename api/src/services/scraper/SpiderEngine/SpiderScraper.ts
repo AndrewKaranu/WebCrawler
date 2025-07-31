@@ -29,7 +29,8 @@ export class SpiderScraper extends SpiderCore {
       
       // Check if URL serves a document based on content type
       if (this.isDocumentContentType(contentType)) {
-        return await this.scrapeDocument(options.url, startTime, contentType);
+        const result = await this.scrapeDocument(options.url, startTime, contentType);
+        return result;
       }
       
       // Navigate to the URL for regular web pages

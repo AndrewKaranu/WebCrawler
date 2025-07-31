@@ -2,6 +2,9 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
+// Import debug utilities
+import '../debug-utils.js';
+
 // Hide loading screen once React is ready
 const hideLoading = () => {
   const loadingElement = document.getElementById('loading');

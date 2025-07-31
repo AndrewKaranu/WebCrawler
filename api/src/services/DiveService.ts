@@ -37,8 +37,70 @@ export class DiveService {
   private static readonly DEFAULT_MAX_PAGES = 50;
   private static readonly DEFAULT_DELAY = 1000; // 1 second between requests
   private static readonly MAX_ALLOWED_DEPTH = 10;
+  
+  // Storage for sitemaps
+  private sitemaps: Map<string, {
+    id: string;
+    sitemap: SiteMap;
+    createdAt: Date;
+    metadata?: any;
+  }> = new Map();
   private static readonly MAX_ALLOWED_PAGES = 1000;
   private static readonly MIN_DELAY = 100; // Minimum 100ms delay
+  
+  constructor() {
+    // Add some example sitemaps for testing
+    this.addExampleSitemaps();
+    
+    // Load cached sitemaps from cache service
+    this.syncSitemapsFromCache().catch(err => {
+      console.error('Error syncing sitemaps from cache:', err);
+    });
+  }
+  
+  /**
+   * Sync sitemaps from cache service
+   */
+  private async syncSitemapsFromCache(): Promise<void> {
+    try {
+      const { cacheService } = require('./CacheService');
+      
+      if (!cacheService) {
+        console.log('Cache service not available, skipping sitemap sync');
+        return;
+      }
+      
+      // Get all cached dive results
+      const cacheKeys = await cacheService.getKeysByPattern('dive:*');
+      console.log(`Found ${cacheKeys.length} potential sitemap cache keys`);
+      
+      for (const key of cacheKeys) {
+        try {
+          const cachedSitemap = await cacheService.getRawValue(key);
+          
+          if (cachedSitemap && typeof cachedSitemap === 'object') {
+            // Extract URL from the key by removing the 'dive:' prefix and unhashing
+            // Note: Since we can't reverse the hash, we use the domain from the sitemap
+            const domain = cachedSitemap.domain;
+            const url = cachedSitemap.startUrl || `https://${domain}`;
+            
+            // Create a sitemapId
+            const sitemapId = `sitemap-cached-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+            
+            // Save the sitemap
+            this.saveSitemap(sitemapId, cachedSitemap, url);
+            console.log(`Loaded cached sitemap for ${domain} with ID: ${sitemapId}`);
+          }
+        } catch (err) {
+          console.error(`Error processing cached sitemap key ${key}:`, err);
+        }
+      }
+      
+      console.log(`Synced ${this.sitemaps.size} sitemaps from cache`);
+    } catch (err) {
+      console.error('Failed to sync sitemaps from cache:', err);
+    }
+  }
 
   /**
    * Validate and normalize dive request parameters
@@ -148,6 +210,7 @@ export class DiveService {
       requestProcessedAt: Date;
       validationResult: DiveValidationResult;
       engineUsed: string;
+      sitemapId?: string;
     };
   }> {
     const requestProcessedAt = new Date();
@@ -177,6 +240,20 @@ export class DiveService {
       
       console.log(`Dive completed: ${sitemap.totalPages} pages processed`);
       
+      // Store the sitemap
+      const sitemapId = `sitemap-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      this.sitemaps.set(sitemapId, {
+        id: sitemapId,
+        sitemap,
+        createdAt: new Date(),
+        metadata: {
+          requestProcessedAt,
+          url: request.url,
+          options: validationResult.processedOptions,
+          engineUsed: engine.name
+        }
+      });
+      
       return {
         success: true,
         sitemap,
@@ -185,6 +262,7 @@ export class DiveService {
           requestProcessedAt,
           validationResult,
           engineUsed: engine.name,
+          sitemapId: sitemapId,
         },
       };
       
@@ -363,5 +441,156 @@ export class DiveService {
         commonPaths,
       },
     };
+  }
+
+  /**
+   * Save a sitemap to the DiveService storage
+   */
+  saveSitemap(id: string, sitemap: SiteMap, url?: string): void {
+    console.log(`Saving sitemap with ID: ${id} for url: ${url || sitemap.startUrl || sitemap.domain}`);
+    this.sitemaps.set(id, {
+      id,
+      sitemap,
+      createdAt: new Date(),
+      metadata: {
+        url: url || sitemap.startUrl,
+        engineUsed: 'SpiderEngine'
+      }
+    });
+    console.log(`Sitemap saved. Updated count: ${this.sitemaps.size}`);
+  }
+
+  /**
+   * Get all stored sitemaps
+   */
+  async getAllSitemaps() {
+    console.log(`Getting all sitemaps. Current count: ${this.sitemaps.size}`);
+    
+    // If we have no sitemaps, add example ones (useful for dev/testing)
+    if (this.sitemaps.size === 0) {
+      console.log('No sitemaps found, adding examples');
+      this.addExampleSitemaps();
+    }
+    
+    const sitemapList = Array.from(this.sitemaps.values()).map(entry => {
+      const { sitemap, id, createdAt, metadata } = entry;
+      
+      try {
+        // Create a simplified version for the listing
+        return {
+          id,
+          domain: sitemap.domain,
+          url: metadata?.url || sitemap.domain, // Use domain if rootUrl is not available
+          createdAt,
+          totalPages: sitemap.totalPages || 0,
+          maxDepth: sitemap.totalDepth || 0,
+          crawled: sitemap.pages?.length || 0,
+          engineUsed: metadata?.engineUsed || 'unknown',
+        };
+      } catch (err) {
+        console.error(`Error processing sitemap ${id}:`, err);
+        return {
+          id,
+          domain: 'Error processing sitemap',
+          url: 'unknown',
+          createdAt: new Date(),
+          totalPages: 0,
+          maxDepth: 0,
+          crawled: 0,
+          engineUsed: 'unknown',
+        };
+      }
+    });
+    
+    console.log(`Returning ${sitemapList.length} sitemaps`);
+    
+    // Sort by created date, newest first
+    return sitemapList.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+  
+  /**
+   * Get a specific sitemap by ID
+   */
+  async getSitemapById(id: string) {
+    return this.sitemaps.get(id) || null;
+  }
+  
+  /**
+   * Add example sitemaps for testing
+   * This ensures we always have some data visible in the UI
+   */
+  private addExampleSitemaps() {
+    // Example 1
+    const exampleSitemap1: any = {
+      domain: 'example.com',
+      totalPages: 25,
+      totalDepth: 3,
+      pages: [
+        {
+          url: 'https://example.com',
+          title: 'Example Domain',
+          depth: 0,
+          contentType: 'text/html',
+          links: [
+            { url: 'https://example.com/about', text: 'About Us', type: 'internal' },
+            { url: 'https://example.com/contact', text: 'Contact', type: 'internal' }
+          ],
+          meta: { description: 'This is an example website' }
+        }
+      ],
+      statistics: {
+        errors: 0,
+        averageLoadTime: 250,
+        externalLinks: 5
+      }
+    };
+    
+    // Example 2
+    const exampleSitemap2: any = {
+      domain: 'test.org',
+      totalPages: 42,
+      totalDepth: 4,
+      pages: [
+        {
+          url: 'https://test.org',
+          title: 'Test Organization',
+          depth: 0,
+          contentType: 'text/html',
+          links: [
+            { url: 'https://test.org/services', text: 'Services', type: 'internal' },
+            { url: 'https://test.org/blog', text: 'Blog', type: 'internal' }
+          ],
+          meta: { description: 'Test organization website' }
+        }
+      ],
+      statistics: {
+        errors: 2,
+        averageLoadTime: 480,
+        externalLinks: 12
+      }
+    };
+    
+    // Add to the sitemaps map
+    this.sitemaps.set('example-sitemap-1', {
+      id: 'example-sitemap-1',
+      sitemap: exampleSitemap1,
+      createdAt: new Date(Date.now() - 86400000), // 1 day ago
+      metadata: {
+        url: 'https://example.com',
+        engineUsed: 'SpiderEngine'
+      }
+    });
+    
+    this.sitemaps.set('example-sitemap-2', {
+      id: 'example-sitemap-2',
+      sitemap: exampleSitemap2,
+      createdAt: new Date(Date.now() - 43200000), // 12 hours ago
+      metadata: {
+        url: 'https://test.org',
+        engineUsed: 'SpiderEngine'
+      }
+    });
+    
+    console.log('Added example sitemaps for testing');
   }
 }

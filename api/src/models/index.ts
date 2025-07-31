@@ -16,6 +16,7 @@ export const ScrapeOptionsSchema = z.object({
   screenshot: z.boolean().default(false),
   fullPage: z.boolean().default(false),
   userAgent: z.string().optional(),
+  bypassCache: z.boolean().default(false),
   viewport: z.object({
     width: z.number().min(320).max(3840),
     height: z.number().min(240).max(2160),

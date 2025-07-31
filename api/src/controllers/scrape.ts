@@ -4,7 +4,7 @@ import { EngineFactory } from '../services/scraper/EngineFactory';
 
 export const scrapeController = {
   /**
-   * Scrape a single URL
+   * Scrape a single URL with cache-first strategy
    */
   async scrape(req: Request, res: Response): Promise<void> {
     try {
@@ -22,11 +22,13 @@ export const scrapeController = {
 
       const options = validation.data;
       
-      // Get appropriate engine
-      const engine = await EngineFactory.getEngine(options.engine);
+      console.log(`🔍 Scrape request for ${options.url} with ${options.engine} engine (cache-enabled)`);
       
-      // Perform scraping
-      const result = await engine.scrape(options);
+      // Get cache-enabled engine (all engines are now wrapped with caching)
+      const cacheEngine = await EngineFactory.getEngine(options.engine);
+      
+      // Perform scraping with cache-first strategy
+      const result = await cacheEngine.scrape(options);
       
       res.json({
         success: true,
@@ -45,7 +47,7 @@ export const scrapeController = {
   },
 
   /**
-   * Scrape multiple URLs in batch
+   * Scrape multiple URLs in batch with cache-first strategy
    */
   async batchScrape(req: Request, res: Response): Promise<void> {
     try {
@@ -74,11 +76,13 @@ export const scrapeController = {
 
       const validatedOptions = validation.data;
       
-      // Get appropriate engine
-      const engine = await EngineFactory.getEngine(validatedOptions.engine);
+      console.log(`🔍 Batch scrape request for ${urls.length} URLs with ${validatedOptions.engine} engine (cache-enabled)`);
       
-      // Perform batch scraping
-      const results = await engine.scrapeMultiple(urls, validatedOptions);
+      // Get cache-enabled engine (all engines are now wrapped with caching)
+      const cacheEngine = await EngineFactory.getEngine(validatedOptions.engine);
+      
+      // Perform batch scraping with cache-first strategy for each URL
+      const results = await cacheEngine.scrapeMultiple(urls, validatedOptions);
       
       res.json({
         success: true,

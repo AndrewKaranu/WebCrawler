@@ -50,6 +50,7 @@ const ScrapeForm: React.FC = () => {
     timeout: 30000,
     headless: true,
     stealth: true,
+    bypassCache: false,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -178,6 +179,18 @@ const ScrapeForm: React.FC = () => {
                         />
                       }
                       label="Stealth Mode"
+                    />
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={advancedOptions.bypassCache}
+                          onChange={(e) => setAdvancedOptions(prev => ({
+                            ...prev,
+                            bypassCache: e.target.checked
+                          }))}
+                        />
+                      }
+                      label="Bypass Cache (Force Fresh Scrape)"
                     />
                   </Stack>
                 </AccordionDetails>
