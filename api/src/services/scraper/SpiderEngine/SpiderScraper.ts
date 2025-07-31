@@ -1,6 +1,12 @@
 import { SpiderCore } from './SpiderCore';
 import { ScrapeOptions, EngineResult } from '../../../models/index';
 
+// Document parsing libraries
+// @ts-ignore
+const pdf: any = require('pdf-parse');
+// @ts-ignore
+const mammoth: any = require('mammoth');
+
 /**
  * SpiderScraper: Web scraping functionality for SpiderEngine
  */
@@ -18,11 +24,22 @@ export class SpiderScraper extends SpiderCore {
     try {
       console.log(`Scraping URL: ${options.url}`);
       
-      // Navigate to the URL
+      // First, check the content type by making a HEAD request
+      const contentType = await this.checkContentType(options.url);
+      
+      // Check if URL serves a document based on content type
+      if (this.isDocumentContentType(contentType)) {
+        return await this.scrapeDocument(options.url, startTime, contentType);
+      }
+      
+      // Navigate to the URL for regular web pages
       await this.sendCommand('Page.navigate', { url: options.url });
       
       // Wait for page load based on options
       await this.waitForLoad(options.waitFor || 0);
+      
+      // Attempt to dismiss cookie popups if present
+      await this.dismissCookiePopups();
       
       // Get page content
       const dom = await this.sendCommand('DOM.getDocument');
@@ -107,6 +124,226 @@ export class SpiderScraper extends SpiderCore {
     }
     
     return results;
+  }
+
+  /**
+   * Scrape PDF or DOCX documents
+   */
+  private async scrapeDocument(url: string, startTime: number, contentType?: string): Promise<EngineResult> {
+    try {
+      console.log(`Scraping document: ${url} (Content-Type: ${contentType})`);
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const buffer = await response.arrayBuffer();
+      let extractedText = '';
+      let title = '';
+      
+      // Use content type if provided, otherwise fall back to URL extension
+      const actualContentType = contentType || response.headers.get('content-type') || '';
+      
+      if (actualContentType.includes('application/pdf') || /\.pdf$/i.test(url)) {
+        const data = await pdf(Buffer.from(buffer));
+        extractedText = data.text;
+        title = data.info?.Title || 'PDF Document';
+      } else if (actualContentType.includes('application/vnd.openxmlformats-officedocument.wordprocessingml.document') || /\.docx$/i.test(url)) {
+        const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+        extractedText = result.value;
+        title = 'DOCX Document';
+      } else if (actualContentType.includes('application/msword') || /\.doc$/i.test(url)) {
+        // For older .doc files, we can try mammoth but it might not work perfectly
+        try {
+          const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+          extractedText = result.value;
+          title = 'DOC Document';
+        } catch (error) {
+          extractedText = 'Unable to extract text from .doc file - consider converting to .docx';
+          title = 'DOC Document (parsing failed)';
+        }
+      }
+      
+      const loadTime = Date.now() - startTime;
+      
+      return {
+        url,
+        html: '', // No HTML for documents
+        text: extractedText,
+        title,
+        meta: { 'content-type': actualContentType },
+        links: [],
+        images: [],
+        loadTime,
+        statusCode: response.status,
+        headers: Object.fromEntries(response.headers.entries()),
+        timestamp: new Date(),
+      };
+    } catch (error) {
+      throw new Error(`Failed to parse document ${url}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Check content type by making a HEAD request
+   */
+  private async checkContentType(url: string): Promise<string> {
+    try {
+      const response = await fetch(url, { method: 'HEAD' });
+      return response.headers.get('content-type') || '';
+    } catch (error) {
+      // If HEAD request fails, return empty string to fall back to browser scraping
+      console.warn(`HEAD request failed for ${url}, falling back to browser scraping`);
+      return '';
+    }
+  }
+
+  /**
+   * Check if content type indicates a document we can parse
+   */
+  private isDocumentContentType(contentType: string): boolean {
+    const documentTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+      'application/msword', // .doc
+    ];
+    
+    return documentTypes.some(type => contentType.includes(type));
+  }
+
+  /**
+   * Attempt to dismiss common cookie popups
+   */
+  private async dismissCookiePopups(): Promise<void> {
+    try {
+      // Quick check if any cookie popup indicators are present
+      const hasPopup = await this.sendCommand('Runtime.evaluate', {
+        expression: `
+          (() => {
+            // Common cookie popup indicators
+            const cookieSelectors = [
+              '[class*="cookie"]',
+              '[id*="cookie"]',
+              '[class*="consent"]',
+              '[id*="consent"]',
+              '[class*="gdpr"]',
+              '[id*="gdpr"]',
+              '[class*="privacy"]',
+              '[id*="privacy"]'
+            ];
+            
+            // Check if any elements match our selectors
+            return cookieSelectors.some(selector => 
+              document.querySelectorAll(selector).length > 0
+            );
+          })()
+        `,
+        returnByValue: true,
+      });
+
+      // Only proceed if we detected potential cookie popups
+      if (!hasPopup.result.value) {
+        return;
+      }
+
+      console.log('Cookie popup detected, attempting to dismiss...');
+
+      // Try to find and click common dismiss buttons
+      await this.sendCommand('Runtime.evaluate', {
+        expression: `
+          (() => {
+            // Common button texts and selectors for cookie dismissal
+            const dismissSelectors = [
+              // By text content (most reliable)
+              'button:contains("Accept")',
+              'button:contains("Accept All")',
+              'button:contains("Allow All")',
+              'button:contains("Accept Cookies")',
+              'button:contains("OK")',
+              'button:contains("Got it")',
+              'button:contains("I Agree")',
+              'button:contains("Agree")',
+              'button:contains("Close")',
+              'button:contains("Dismiss")',
+              
+              // By common class/id patterns
+              '[class*="accept"]',
+              '[class*="agree"]',
+              '[class*="allow"]',
+              '[class*="consent"] button',
+              '[class*="cookie"] button',
+              '[class*="gdpr"] button',
+              '[id*="accept"]',
+              '[id*="agree"]',
+              '[id*="allow"]',
+              
+              // Generic close buttons in overlays
+              '[class*="modal"] [class*="close"]',
+              '[class*="overlay"] [class*="close"]',
+              '[class*="popup"] [class*="close"]',
+              
+              // ARIA labels
+              '[aria-label*="accept" i]',
+              '[aria-label*="agree" i]',
+              '[aria-label*="close" i]',
+              '[aria-label*="dismiss" i]'
+            ];
+
+            // Helper function to check if element contains text (case insensitive)
+            function containsText(element, text) {
+              return element.textContent.toLowerCase().includes(text.toLowerCase());
+            }
+
+            // Try each selector
+            for (let selector of dismissSelectors) {
+              let elements;
+              
+              // Handle :contains() pseudo-selector manually
+              if (selector.includes(':contains(')) {
+                const match = selector.match(/^(.+?):contains\\("(.+?)"\\)$/);
+                if (match) {
+                  const [, baseSelector, text] = match;
+                  elements = Array.from(document.querySelectorAll(baseSelector))
+                    .filter(el => containsText(el, text));
+                } else {
+                  continue;
+                }
+              } else {
+                elements = Array.from(document.querySelectorAll(selector));
+              }
+
+              // Find the best candidate (visible and clickable)
+              for (let element of elements) {
+                const rect = element.getBoundingClientRect();
+                const style = window.getComputedStyle(element);
+                
+                // Check if element is visible and clickable
+                if (rect.width > 0 && rect.height > 0 && 
+                    style.visibility !== 'hidden' && 
+                    style.display !== 'none' &&
+                    !element.disabled) {
+                  
+                  console.log('Clicking cookie dismiss button:', element);
+                  element.click();
+                  return true; // Successfully clicked
+                }
+              }
+            }
+            
+            return false; // No suitable button found
+          })()
+        `,
+        returnByValue: true,
+      });
+
+      // Give a moment for the popup to disappear
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+    } catch (error) {
+      // Silently fail - don't let cookie popup issues break the scraping
+      console.warn('Cookie popup dismissal failed, continuing with scraping:', error);
+    }
   }
 
   /**

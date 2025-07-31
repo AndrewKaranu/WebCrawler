@@ -11,6 +11,7 @@ export interface DiveRequest {
   followExternalLinks?: boolean;
   includeAssets?: boolean;
   respectRobotsTxt?: boolean;
+  stayWithinBaseUrl?: boolean;
   delay?: number;
   userAgent?: string;
   excludePatterns?: string[];
@@ -120,6 +121,7 @@ export class DiveService {
       followExternalLinks: request.followExternalLinks ?? false,
       includeAssets: request.includeAssets ?? false,
       respectRobotsTxt: request.respectRobotsTxt ?? true,
+      stayWithinBaseUrl: request.stayWithinBaseUrl ?? true,
       delay,
       userAgent: request.userAgent,
       excludePatterns: request.excludePatterns,
@@ -216,13 +218,16 @@ export class DiveService {
     processed: number;
     queued: number;
     visited: number;
+    diveInfo?: { domain: string; baseUrl: string; visited: number; queued: number };
   } | null> {
     // In a full implementation, you'd track engines by ID
     // For now, this is a placeholder that would need engine management
     try {
       const engine = await EngineFactory.getEngine('spider');
       if ((engine as any).getDiveProgress) {
-        return (engine as any).getDiveProgress();
+        const progress = (engine as any).getDiveProgress();
+        const diveInfo = (engine as any).getDiveInfo ? (engine as any).getDiveInfo() : undefined;
+        return { ...progress, diveInfo };
       }
       return null;
     } catch (error) {
@@ -249,6 +254,7 @@ export class DiveService {
       maxPages: 10,
       followExternalLinks: false,
       includeAssets: false,
+      stayWithinBaseUrl: true,
       delay: 500,
     };
 

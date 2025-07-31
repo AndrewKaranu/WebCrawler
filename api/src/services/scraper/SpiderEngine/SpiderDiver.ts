@@ -10,6 +10,7 @@ export interface DiveOptions {
   followExternalLinks?: boolean;
   includeAssets?: boolean;
   respectRobotsTxt?: boolean;
+  stayWithinBaseUrl?: boolean; // New option to control base URL filtering
   delay?: number;
   userAgent?: string;
   excludePatterns?: string[];
@@ -67,6 +68,7 @@ export class SpiderDiver extends SpiderCore {
   private queue: Array<{ url: string; depth: number }> = [];
   private sitemap: PageInfo[] = [];
   private domain: string = '';
+  private baseUrl: string = '';
   private startTime: number = 0;
 
   /**
@@ -83,9 +85,13 @@ export class SpiderDiver extends SpiderCore {
     this.sitemap = [];
     
     const startUrl = this.normalizeUrl(options.startUrl);
-    this.domain = new URL(startUrl).hostname;
+    const startUrlObj = new URL(startUrl);
+    this.domain = startUrlObj.hostname;
+    this.baseUrl = `${startUrlObj.protocol}//${startUrlObj.hostname}`;
     
     console.log(`Starting dive on ${startUrl} with max depth ${options.maxDepth} and max pages ${options.maxPages}`);
+    console.log(`Base URL for filtering: ${this.baseUrl}`);
+    console.log(`Stay within base URL: ${options.stayWithinBaseUrl ?? true}`);
     
     // Add the starting URL to the queue
     this.queue.push({ url: startUrl, depth: 0 });
@@ -226,13 +232,31 @@ export class SpiderDiver extends SpiderCore {
           (() => {
             const links = [];
             const currentHost = new URL('${currentUrl}').hostname;
+            const baseUrl = '${this.baseUrl}';
+            const stayWithinBaseUrl = ${options.stayWithinBaseUrl ?? true};
             
             // Extract anchor links
             document.querySelectorAll('a[href]').forEach(link => {
               try {
                 const url = new URL(link.href, '${currentUrl}').href;
                 const linkHost = new URL(url).hostname;
-                const type = linkHost === currentHost ? 'internal' : 'external';
+                
+                // Determine if link is internal, external, or base-external
+                let type = 'external';
+                if (linkHost === currentHost) {
+                  if (stayWithinBaseUrl) {
+                    // If base URL filtering is enabled, check if URL starts with base
+                    if (url.startsWith(baseUrl)) {
+                      type = 'internal';
+                    } else {
+                      // Same host but outside base URL - mark as external
+                      type = 'external';
+                    }
+                  } else {
+                    // If base URL filtering is disabled, all same-host links are internal
+                    type = 'internal';
+                  }
+                }
                 
                 links.push({
                   url: url,
@@ -250,12 +274,17 @@ export class SpiderDiver extends SpiderCore {
               try {
                 const url = new URL(element.src || element.href, '${currentUrl}').href;
                 const linkHost = new URL(url).hostname;
-                const type = linkHost === currentHost ? 'internal' : 'external';
+                
+                // For assets, apply the same base URL logic
+                let type = 'asset';
+                if (stayWithinBaseUrl && linkHost === currentHost && !url.startsWith(baseUrl)) {
+                  // Asset is on same host but outside base URL, still mark as asset but note it
+                }
                 
                 links.push({
                   url: url,
                   text: element.alt || element.title || '',
-                  type: 'asset'
+                  type: type
                 });
               } catch (e) {
                 // Invalid URL, skip
@@ -361,17 +390,62 @@ export class SpiderDiver extends SpiderCore {
    * Determine if a link should be followed based on options
    */
   private shouldFollowLink(link: { url: string; type: 'internal' | 'external' | 'asset' }, options: DiveOptions): boolean {
-    // Don't follow external links unless specified
-    if (link.type === 'external' && !options.followExternalLinks) {
-      return false;
+    // First check: Only follow internal links (which already respect base URL if enabled)
+    if (link.type !== 'internal') {
+      // Don't follow external links unless specifically requested
+      if (link.type === 'external' && !options.followExternalLinks) {
+        return false;
+      }
+      // Don't follow assets unless specifically requested
+      if (link.type === 'asset' && !options.includeAssets) {
+        return false;
+      }
     }
     
-    // Don't follow assets unless specified
-    if (link.type === 'asset' && !options.includeAssets) {
-      return false;
+    // Second check: Apply base URL filtering only if enabled (default: true)
+    const stayWithinBaseUrl = options.stayWithinBaseUrl ?? true;
+    if (stayWithinBaseUrl) {
+      try {
+        const linkUrl = new URL(link.url);
+        const linkHost = linkUrl.hostname;
+        
+        // If it's not the same host as our base, don't follow (unless external links are allowed)
+        if (linkHost !== this.domain) {
+          return options.followExternalLinks || false;
+        }
+        
+        // If it's the same host, ensure it starts with our base URL
+        if (!link.url.startsWith(this.baseUrl)) {
+          console.log(`Skipping URL outside base: ${link.url} (base: ${this.baseUrl})`);
+          return false;
+        }
+      } catch (error) {
+        // Invalid URL, don't follow
+        return false;
+      }
+    } else {
+      // Base URL filtering is disabled - only check host matching for internal links
+      try {
+        const linkUrl = new URL(link.url);
+        const linkHost = linkUrl.hostname;
+        
+        // If link type is internal but host doesn't match, there's an inconsistency
+        if (link.type === 'internal' && linkHost !== this.domain) {
+          console.log(`Warning: Internal link with different host: ${link.url}`);
+          return false;
+        }
+        
+        // If it's external and external links aren't allowed, don't follow
+        if (link.type === 'external' && !options.followExternalLinks) {
+          return false;
+        }
+      } catch (error) {
+        // Invalid URL, don't follow
+        return false;
+      }
     }
     
-    // Check exclude patterns
+    // Third check: Apply exclude patterns
     if (options.excludePatterns) {
       for (const pattern of options.excludePatterns) {
         if (new RegExp(pattern).test(link.url)) {
@@ -380,7 +454,7 @@ export class SpiderDiver extends SpiderCore {
       }
     }
     
-    // Check include patterns (if specified, URL must match at least one)
+    // Fourth check: Apply include patterns (if specified, URL must match at least one)
     if (options.includePatterns && options.includePatterns.length > 0) {
       const matches = options.includePatterns.some(pattern => 
         new RegExp(pattern).test(link.url)
@@ -460,6 +534,18 @@ export class SpiderDiver extends SpiderCore {
   }
 
   /**
+   * Get dive configuration info
+   */
+  getDiveInfo(): { domain: string; baseUrl: string; visited: number; queued: number } {
+    return {
+      domain: this.domain,
+      baseUrl: this.baseUrl,
+      visited: this.visited.size,
+      queued: this.queue.length,
+    };
+  }
+
+  /**
    * Generate a markdown sitemap with titles and links
    */
   private generateMarkdownSitemap(): string {
@@ -468,6 +554,7 @@ export class SpiderDiver extends SpiderCore {
     
     let markdown = `# Website Sitemap\n\n`;
     markdown += `**Domain:** ${this.domain}\n`;
+    markdown += `**Base URL:** ${this.baseUrl}\n`;
     markdown += `**Generated:** ${formatDate(now)}\n`;
     markdown += `**Total Pages:** ${this.sitemap.length}\n`;
     markdown += `**Max Depth:** ${Math.max(...this.sitemap.map(p => p.depth), 0)}\n\n`;

@@ -5,6 +5,7 @@ import { searchController } from './controllers/search';
 import { transformController } from './controllers/transform';
 import { jobsController } from './controllers/jobs';
 import { DiveController } from './controllers/dive';
+import { massScraperController } from './controllers/massScraperController';
 
 const router = express.Router();
 
@@ -31,6 +32,15 @@ router.post('/transform/extract-data', transformController.extractData);
 router.get('/jobs', jobsController.listJobs);
 router.get('/jobs/:jobId', jobsController.getJob);
 router.delete('/jobs/:jobId', jobsController.deleteJob);
+
+// Mass scraper endpoints
+router.post('/mass-scrape', massScraperController.createBatch);
+router.get('/mass-scrape', massScraperController.getAllBatches);
+router.get('/mass-scrape/:batchId', massScraperController.getBatchStatus);
+router.get('/mass-scrape/:batchId/results', massScraperController.getBatchResults);
+router.delete('/mass-scrape/:batchId/cancel', massScraperController.cancelBatch);
+router.delete('/mass-scrape/:batchId', massScraperController.deleteBatch);
+router.post('/mass-scrape/from-dive', massScraperController.createBatchFromDive);
 
 // Engine management endpoints
 router.get('/engines', (req: express.Request, res: express.Response) => {
@@ -552,7 +562,7 @@ router.post('/automate/execute-script', async (req: express.Request, res: expres
 // Dive endpoints (website structure mapping)
 router.post('/dive', diveController.performDive.bind(diveController));
 router.post('/dive/preview', diveController.generatePreview.bind(diveController));
-router.get('/dive/progress/:engineId?', diveController.getDiveProgress.bind(diveController));
+router.get('/dive/progress/:jobId', diveController.getDiveProgress.bind(diveController));
 router.post('/dive/validate', diveController.validateDiveRequest.bind(diveController));
 router.get('/dive/config', diveController.getDiveConfig.bind(diveController));
 router.post('/dive/analyze', diveController.analyzeSitemap.bind(diveController));

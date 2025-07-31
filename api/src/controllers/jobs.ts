@@ -1,17 +1,32 @@
 import { Request, Response } from 'express';
+import { getJobStatus, jobQueue } from '../services/JobQueueService';
 
 export const jobsController = {
-  async listJobs(req: Request, res: Response): Promise<void> {
-    res.json({ success: true, data: [], message: 'Jobs list - Coming soon!' });
+  // List recent jobs (e.g. all waiting/active jobs)
+  listJobs: async (req: Request, res: Response) => {
+    const waiting = await jobQueue.getJobs(['waiting']);
+    const active = await jobQueue.getJobs(['active']);
+    const completed = await jobQueue.getJobs(['completed']);
+    res.json({ success: true, data: { waiting, active, completed } });
   },
-
-  async getJob(req: Request, res: Response): Promise<void> {
+  
+  // Get status of a specific job by ID
+  getJob: async (req: Request, res: Response) => {
     const { jobId } = req.params;
-    res.json({ success: true, jobId, message: 'Get job details - Coming soon!' });
+    const status = await getJobStatus(jobId);
+    if (!status) {
+      return res.status(404).json({ success: false, error: 'Job not found' });
+    }
+    return res.json({ success: true, data: status });
   },
-
-  async deleteJob(req: Request, res: Response): Promise<void> {
+  
+  // Remove a job (clean up)
+  deleteJob: async (req: Request, res: Response) => {
     const { jobId } = req.params;
-    res.json({ success: true, message: `Job ${jobId} deleted` });
+    const success = await jobQueue.removeJob(jobId);
+    if (!success) {
+      return res.status(404).json({ success: false, error: 'Job not found' });
+    }
+    return res.json({ success: true, message: 'Job removed' });
   }
 };

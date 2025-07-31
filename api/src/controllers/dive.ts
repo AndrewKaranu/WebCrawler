@@ -24,6 +24,7 @@ export class DiveController {
         followExternalLinks: req.body.followExternalLinks,
         includeAssets: req.body.includeAssets,
         respectRobotsTxt: req.body.respectRobotsTxt,
+        stayWithinBaseUrl: req.body.stayWithinBaseUrl,
         delay: req.body.delay,
         userAgent: req.body.userAgent,
         excludePatterns: req.body.excludePatterns,
@@ -37,31 +38,11 @@ export class DiveController {
         maxPages: diveRequest.maxPages,
       });
 
-      const result = await this.diveService.performDive(diveRequest);
-
-      if (result.success) {
-        // Generate analysis for the sitemap
-        const analysis = result.sitemap 
-          ? this.diveService.analyzeSitemap(result.sitemap)
-          : null;
-
-        res.json({
-          success: true,
-          data: {
-            sitemap: result.sitemap,
-            analysis,
-            warnings: result.warnings,
-            metadata: result.metadata,
-          },
-        });
-      } else {
-        res.status(400).json({
-          success: false,
-          errors: result.errors,
-          warnings: result.warnings,
-          metadata: result.metadata,
-        });
-      }
+      // Enqueue a full dive job
+      const { enqueueJob } = require('../services/JobQueueService');
+      const job = await enqueueJob('diveFull', { request: diveRequest });
+      // Return job ID for tracking
+      res.json({ success: true, jobId: job.id });
     } catch (error) {
       console.error('Error in dive controller:', error);
       res.status(500).json({
@@ -90,19 +71,16 @@ export class DiveController {
 
       console.log(`Generating preview for: ${url}`);
 
-      const result = await this.diveService.generateSitemapPreview(url);
-
-      if (result.success) {
-        res.json({
-          success: true,
-          data: result.preview,
-        });
-      } else {
-        res.status(400).json({
-          success: false,
-          errors: result.errors,
-        });
-      }
+      // Enqueue a preview dive job
+      const { enqueueJob } = require('../services/JobQueueService');
+      const job = await enqueueJob('divePreview', { url, options: { maxDepth: 1, maxPages: 10 } });
+      
+      // Return job ID for tracking
+      res.json({
+        success: true,
+        jobId: job.id,
+        message: 'Preview generation started'
+      });
     } catch (error) {
       console.error('Error generating preview:', error);
       res.status(500).json({
@@ -115,30 +93,42 @@ export class DiveController {
 
   /**
    * Get dive progress for monitoring
-   * GET /api/dive/progress/:engineId?
+   * GET /api/dive/progress/:jobId
    */
   async getDiveProgress(req: Request, res: Response): Promise<void> {
     try {
-      const engineId = req.params.engineId;
+      const { jobId } = req.params;
       
-      const progress = await this.diveService.getDiveProgress(engineId);
-
-      if (progress) {
-        res.json({
-          success: true,
-          data: progress,
+      if (!jobId) {
+        res.status(400).json({
+          success: false,
+          errors: ['Job ID is required'],
         });
-      } else {
-        res.json({
-          success: true,
-          data: {
-            processed: 0,
-            queued: 0,
-            visited: 0,
-          },
-          message: 'No active dive in progress',
-        });
+        return;
       }
+
+      const { getJobStatus } = require('../services/JobQueueService');
+      const status = await getJobStatus(jobId);
+
+      if (!status) {
+        res.status(404).json({
+          success: false,
+          errors: ['Job not found'],
+        });
+        return;
+      }
+
+      res.json({
+        success: true,
+        data: {
+          jobId: status.id,
+          jobName: status.name,
+          state: status.state,
+          progress: status.progress,
+          result: status.result,
+          error: status.failedReason
+        },
+      });
     } catch (error) {
       console.error('Error getting dive progress:', error);
       res.status(500).json({
@@ -162,6 +152,7 @@ export class DiveController {
         followExternalLinks: req.body.followExternalLinks,
         includeAssets: req.body.includeAssets,
         respectRobotsTxt: req.body.respectRobotsTxt,
+        stayWithinBaseUrl: req.body.stayWithinBaseUrl,
         delay: req.body.delay,
         userAgent: req.body.userAgent,
         excludePatterns: req.body.excludePatterns,

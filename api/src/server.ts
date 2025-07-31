@@ -5,6 +5,9 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import { routes } from './routes';
 
+// Import and start the simple job worker (no Redis required)
+import './services/JobWorker';
+
 const app = express();
 const PORT = process.env['PORT'] || 3001;
 

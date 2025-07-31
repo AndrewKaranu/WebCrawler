@@ -57,6 +57,7 @@ import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import CodeIcon from '@mui/icons-material/Code';
 import MouseIcon from '@mui/icons-material/Mouse';
 import KeyboardIcon from '@mui/icons-material/Keyboard';
+import StopIcon from '@mui/icons-material/Stop';
 
 interface DiveRequest {
   url: string;
@@ -65,6 +66,7 @@ interface DiveRequest {
   followExternalLinks?: boolean;
   includeAssets?: boolean;
   respectRobotsTxt?: boolean;
+  stayWithinBaseUrl?: boolean;
   delay?: number;
   userAgent?: string;
   excludePatterns?: string[];
@@ -116,6 +118,7 @@ const DiveTest: React.FC = () => {
   const [followExternalLinks, setFollowExternalLinks] = useState(false);
   const [includeAssets, setIncludeAssets] = useState(false);
   const [respectRobotsTxt, setRespectRobotsTxt] = useState(true);
+  const [stayWithinBaseUrl, setStayWithinBaseUrl] = useState(true);
   const [delay, setDelay] = useState(1000);
   const [userAgent, setUserAgent] = useState('');
   const [excludePatterns, setExcludePatterns] = useState('');
@@ -123,7 +126,15 @@ const DiveTest: React.FC = () => {
   const [engineType, setEngineType] = useState<'spider' | 'puppeteer'>('spider');
   
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState<{ processed: number; queued: number; visited: number } | null>(null);
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ 
+    processed: number; 
+    queued: number; 
+    visited: number;
+    status?: string;
+    domain?: string;
+    baseUrl?: string;
+  } | null>(null);
   const [sitemap, setSitemap] = useState<SiteMap | null>(null);
   const [analysis, setAnalysis] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -136,20 +147,40 @@ const DiveTest: React.FC = () => {
 
   const progressTimer = React.useRef<NodeJS.Timeout | null>(null);
 
-  const startProgressMonitoring = () => {
+  const startProgressMonitoring = (jobId: string) => {
     if (progressTimer.current) {
       clearInterval(progressTimer.current);
     }
     
     progressTimer.current = setInterval(async () => {
       try {
-        const response = await fetch('http://localhost:3001/api/dive/progress');
+        const response = await fetch(`http://localhost:3001/api/dive/progress/${jobId}`);
         const result = await response.json();
         if (result.success) {
-          setProgress(result.data);
+          const jobData = result.data;
+          
+          // Update progress from job progress data
+          if (jobData.progress) {
+            setProgress(jobData.progress);
+          }
+          
+          // Check if job is completed
+          if (jobData.state === 'completed' && jobData.result) {
+            setSitemap(jobData.result.sitemap);
+            setAnalysis(jobData.result.analysis);
+            setWarnings(jobData.result.warnings || []);
+            setLoading(false);
+            stopProgressMonitoring();
+            console.log('Dive completed successfully:', jobData.result);
+          } else if (jobData.state === 'failed') {
+            setError(jobData.error || 'Job failed');
+            setLoading(false);
+            stopProgressMonitoring();
+          }
         }
       } catch (err) {
         // Ignore progress errors
+        console.warn('Progress monitoring error:', err);
       }
     }, 2000);
   };
@@ -160,6 +191,29 @@ const DiveTest: React.FC = () => {
       progressTimer.current = null;
     }
     setProgress(null);
+  };
+
+  const stopCurrentJob = async () => {
+    if (!currentJobId) return;
+    
+    try {
+      const response = await fetch(`http://localhost:3001/api/jobs/${currentJobId}`, {
+        method: 'DELETE'
+      });
+      
+      if (response.ok) {
+        setCurrentJobId(null);
+        setLoading(false);
+        stopProgressMonitoring();
+        setProgress(null);
+        console.log('Job stopped successfully');
+      } else {
+        const result = await response.json();
+        setError(result.error || 'Failed to stop job');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error stopping job');
+    }
   };
 
   React.useEffect(() => {
@@ -182,6 +236,7 @@ const DiveTest: React.FC = () => {
       followExternalLinks,
       includeAssets,
       respectRobotsTxt,
+      stayWithinBaseUrl,
       delay,
       userAgent: userAgent || undefined,
       excludePatterns: excludePatterns ? excludePatterns.split('\n').filter(p => p.trim()) : undefined,
@@ -190,8 +245,6 @@ const DiveTest: React.FC = () => {
     };
 
     try {
-      startProgressMonitoring();
-      
       const response = await fetch('http://localhost:3001/api/dive', {
         method: 'POST',
         headers: {
@@ -202,11 +255,10 @@ const DiveTest: React.FC = () => {
 
       const result = await response.json();
       
-      if (result.success) {
-        setSitemap(result.data.sitemap);
-        setAnalysis(result.data.analysis);
-        setWarnings(result.data.warnings || []);
-        console.log('Dive completed successfully:', result.data);
+      if (result.success && result.jobId) {
+        setCurrentJobId(result.jobId);
+        startProgressMonitoring(result.jobId);
+        console.log('Dive job started with ID:', result.jobId);
       } else {
         throw new Error(result.errors?.join(', ') || 'Unknown error');
       }
@@ -214,9 +266,7 @@ const DiveTest: React.FC = () => {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setError(errorMessage);
-    } finally {
       setLoading(false);
-      stopProgressMonitoring();
     }
   };
 
@@ -235,9 +285,9 @@ const DiveTest: React.FC = () => {
 
       const result = await response.json();
       
-      if (result.success) {
-        console.log('Preview generated:', result.data);
-        alert(`Preview: Found ${result.data.pageCount} pages with ${result.data.links.length} links`);
+      if (result.success && result.jobId) {
+        console.log('Preview job started with ID:', result.jobId);
+        alert(`Preview job started! Job ID: ${result.jobId}. Check the Jobs tab to monitor progress.`);
       } else {
         throw new Error(result.errors?.join(', ') || 'Unknown error');
       }
@@ -258,6 +308,7 @@ const DiveTest: React.FC = () => {
       followExternalLinks,
       includeAssets,
       respectRobotsTxt,
+      stayWithinBaseUrl,
       delay,
       userAgent: userAgent || undefined,
       excludePatterns: excludePatterns ? excludePatterns.split('\n').filter(p => p.trim()) : undefined,
@@ -363,10 +414,25 @@ const DiveTest: React.FC = () => {
       {progress && (
         <Paper sx={{ p: 2, mb: 2, bgcolor: 'info.light', color: 'info.contrastText' }}>
           <Typography variant="h6" gutterBottom>
-            Dive in Progress...
+            {currentJobId ? `Job ${currentJobId}: ` : ''}Dive in Progress...
           </Typography>
+          {progress.domain && (
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              <strong>Domain:</strong> {progress.domain}
+            </Typography>
+          )}
+          {progress.baseUrl && (
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              <strong>Base URL:</strong> {progress.baseUrl}
+            </Typography>
+          )}
+          {progress.status && (
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              <strong>Status:</strong> {progress.status}
+            </Typography>
+          )}
           <Typography variant="body2">
-            Processed: {progress.processed} pages | Queued: {progress.queued} | Visited: {progress.visited}
+            Processed: {progress.processed || 0} pages | Queued: {progress.queued || 0} | Visited: {progress.visited || 0}
           </Typography>
           <LinearProgress sx={{ mt: 1 }} />
         </Paper>
@@ -466,6 +532,15 @@ const DiveTest: React.FC = () => {
                       }
                       label="Respect Robots.txt"
                     />
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={stayWithinBaseUrl}
+                          onChange={(e) => setStayWithinBaseUrl(e.target.checked)}
+                        />
+                      }
+                      label="Stay Within Base URL"
+                    />
                   </Box>
                 </Grid>
               </Grid>
@@ -536,6 +611,17 @@ const DiveTest: React.FC = () => {
               >
                 Start Dive
               </Button>
+              {currentJobId && loading && (
+                <Button
+                  variant="contained"
+                  color="error"
+                  onClick={stopCurrentJob}
+                  startIcon={<StopIcon />}
+                  size="large"
+                >
+                  Stop Job
+                </Button>
+              )}
               <Button
                 variant="outlined"
                 onClick={handlePreview}

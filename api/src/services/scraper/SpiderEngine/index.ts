@@ -227,6 +227,10 @@ export class SpiderEngine implements IEngine {
     return this.diver.getDiveProgress();
   }
 
+  getDiveInfo(): { domain: string; baseUrl: string; visited: number; queued: number } {
+    return this.diver.getDiveInfo();
+  }
+
   // Getter for initialized state
   get initialized(): boolean {
     return (this.scraper as any).initialized;
