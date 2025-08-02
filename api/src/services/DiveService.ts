@@ -1,5 +1,7 @@
 import { EngineFactory } from './scraper/EngineFactory';
 import { DiveOptions, SiteMap } from './scraper/SpiderEngine/SpiderDiver';
+import { saveData, loadData, listDataFiles, deleteData, initStorage, SITEMAPS_DIR } from './PersistentStorage';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Interface for dive request validation
@@ -37,6 +39,9 @@ export class DiveService {
   private static readonly DEFAULT_MAX_PAGES = 50;
   private static readonly DEFAULT_DELAY = 1000; // 1 second between requests
   private static readonly MAX_ALLOWED_DEPTH = 10;
+  private static readonly MAX_ALLOWED_PAGES = 1000;
+  private static readonly MIN_DELAY = 100; // Minimum 100ms delay
+  // Remove custom SITEMAPS_DIR; using absolute path from PersistentStorage
   
   // Storage for sitemaps
   private sitemaps: Map<string, {
@@ -45,17 +50,53 @@ export class DiveService {
     createdAt: Date;
     metadata?: any;
   }> = new Map();
-  private static readonly MAX_ALLOWED_PAGES = 1000;
-  private static readonly MIN_DELAY = 100; // Minimum 100ms delay
   
   constructor() {
-    // Add some example sitemaps for testing
-    this.addExampleSitemaps();
-    
-    // Load cached sitemaps from cache service
-    this.syncSitemapsFromCache().catch(err => {
-      console.error('Error syncing sitemaps from cache:', err);
-    });
+    // Initialize storage and load persisted sitemaps
+    this.initialize();
+  }
+
+  /**
+   * Initialize service and load saved sitemaps
+   */
+  private async initialize(): Promise<void> {
+    try {
+      await initStorage();
+      
+      // Load all saved sitemaps
+      const sitemapIds = await listDataFiles(SITEMAPS_DIR);
+      console.log(`Loading ${sitemapIds.length} saved sitemaps...`);
+      
+      for (const sitemapId of sitemapIds) {
+        const sitemapData = await loadData<{
+          id: string;
+          sitemap: SiteMap;
+          createdAt: Date;
+          metadata?: any;
+        }>(SITEMAPS_DIR, sitemapId);
+        
+        if (sitemapData) {
+          // Ensure createdAt is a Date object after loading from JSON
+          sitemapData.createdAt = new Date(sitemapData.createdAt as any);
+          this.sitemaps.set(sitemapData.id, sitemapData);
+        }
+      }
+      
+      console.log(`Loaded ${this.sitemaps.size} sitemaps from persistent storage`);
+      
+      // If no sitemaps exist, add examples for development
+      if (this.sitemaps.size === 0) {
+        this.addExampleSitemaps();
+      }
+      
+      // Legacy cache sync removed to prevent duplicate sitemaps
+      // await this.syncSitemapsFromCache();
+      
+    } catch (error) {
+      console.error('Error initializing dive service:', error);
+      // Fall back to example sitemaps if initialization fails
+      this.addExampleSitemaps();
+    }
   }
   
   /**
@@ -84,11 +125,11 @@ export class DiveService {
             const domain = cachedSitemap.domain;
             const url = cachedSitemap.startUrl || `https://${domain}`;
             
-            // Create a sitemapId
-            const sitemapId = `sitemap-cached-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+            // Create a unique sitemap ID
+            const sitemapId = uuidv4();
             
             // Save the sitemap
-            this.saveSitemap(sitemapId, cachedSitemap, url);
+            await this.saveSitemap(sitemapId, cachedSitemap, url);
             console.log(`Loaded cached sitemap for ${domain} with ID: ${sitemapId}`);
           }
         } catch (err) {
@@ -446,9 +487,10 @@ export class DiveService {
   /**
    * Save a sitemap to the DiveService storage
    */
-  saveSitemap(id: string, sitemap: SiteMap, url?: string): void {
+  async saveSitemap(id: string, sitemap: SiteMap, url?: string): Promise<void> {
     console.log(`Saving sitemap with ID: ${id} for url: ${url || sitemap.startUrl || sitemap.domain}`);
-    this.sitemaps.set(id, {
+    
+    const sitemapEntry = {
       id,
       sitemap,
       createdAt: new Date(),
@@ -456,7 +498,19 @@ export class DiveService {
         url: url || sitemap.startUrl,
         engineUsed: 'SpiderEngine'
       }
-    });
+    };
+    
+    // Save to memory
+    this.sitemaps.set(id, sitemapEntry);
+    
+    // Save to persistent storage
+    try {
+      await saveData(SITEMAPS_DIR, id, sitemapEntry);
+      console.log(`Sitemap ${id} saved to persistent storage`);
+    } catch (error) {
+      console.error(`Failed to save sitemap ${id} to persistent storage:`, error);
+    }
+    
     console.log(`Sitemap saved. Updated count: ${this.sitemaps.size}`);
   }
 
@@ -464,55 +518,68 @@ export class DiveService {
    * Get all stored sitemaps
    */
   async getAllSitemaps() {
-    console.log(`Getting all sitemaps. Current count: ${this.sitemaps.size}`);
-    
-    // If we have no sitemaps, add example ones (useful for dev/testing)
-    if (this.sitemaps.size === 0) {
-      console.log('No sitemaps found, adding examples');
-      this.addExampleSitemaps();
-    }
-    
-    const sitemapList = Array.from(this.sitemaps.values()).map(entry => {
-      const { sitemap, id, createdAt, metadata } = entry;
-      
-      try {
-        // Create a simplified version for the listing
-        return {
-          id,
-          domain: sitemap.domain,
-          url: metadata?.url || sitemap.domain, // Use domain if rootUrl is not available
-          createdAt,
-          totalPages: sitemap.totalPages || 0,
-          maxDepth: sitemap.totalDepth || 0,
-          crawled: sitemap.pages?.length || 0,
-          engineUsed: metadata?.engineUsed || 'unknown',
-        };
-      } catch (err) {
-        console.error(`Error processing sitemap ${id}:`, err);
-        return {
-          id,
-          domain: 'Error processing sitemap',
-          url: 'unknown',
-          createdAt: new Date(),
-          totalPages: 0,
-          maxDepth: 0,
-          crawled: 0,
-          engineUsed: 'unknown',
-        };
+    // Dynamically load all sitemap entries from persistent storage
+    const sitemapIds = await listDataFiles(SITEMAPS_DIR);
+    const sitemapList: Array<{ id: string; domain: string; url: string; createdAt: Date; totalPages: number; maxDepth: number; crawled: number; engineUsed: string; }> = [];
+    for (const id of sitemapIds) {
+      const entry = await loadData<{ id: string; sitemap: SiteMap; createdAt: Date; metadata?: any }>(SITEMAPS_DIR, id);
+      if (entry) {
+        // Ensure createdAt is Date
+        const createdAt = new Date(entry.createdAt as any);
+        try {
+          sitemapList.push({
+            id: entry.id,
+            domain: entry.sitemap.domain,
+            url: entry.metadata?.url || entry.sitemap.domain,
+            createdAt,
+            totalPages: entry.sitemap.totalPages || 0,
+            maxDepth: entry.sitemap.totalDepth || 0,
+            crawled: entry.sitemap.pages?.length || 0,
+            engineUsed: entry.metadata?.engineUsed || 'unknown',
+          });
+        } catch (err) {
+          console.error(`Error processing sitemap ${id}:`, err);
+        }
       }
-    });
-    
-    console.log(`Returning ${sitemapList.length} sitemaps`);
-    
-    // Sort by created date, newest first
+    }
+    // Sort by creation timestamp descending
     return sitemapList.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
   
   /**
-   * Get a specific sitemap by ID
+   * Get a specific sitemap by ID (loads from persistent storage)
    */
-  async getSitemapById(id: string) {
-    return this.sitemaps.get(id) || null;
+  async getSitemapById(id: string): Promise<{ id: string; sitemap: SiteMap; createdAt: Date; metadata?: any } | null> {
+    try {
+      const entry = await loadData<{ id: string; sitemap: SiteMap; createdAt: Date; metadata?: any }>(SITEMAPS_DIR, id);
+      if (!entry) {
+        return null;
+      }
+      // Ensure createdAt is a Date object
+      entry.createdAt = new Date(entry.createdAt as any);
+      return entry;
+    } catch (error) {
+      console.error(`Error loading sitemap ${id} from storage:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Delete a sitemap by ID
+   */
+  async deleteSitemap(id: string): Promise<boolean> {
+    const deleted = this.sitemaps.delete(id);
+    
+    if (deleted) {
+      try {
+        await deleteData(SITEMAPS_DIR, id);
+        console.log(`Deleted sitemap ${id} from persistent storage`);
+      } catch (error) {
+        console.error(`Failed to delete sitemap ${id} from persistent storage:`, error);
+      }
+    }
+    
+    return deleted;
   }
   
   /**

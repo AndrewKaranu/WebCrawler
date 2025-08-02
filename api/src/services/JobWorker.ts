@@ -1,4 +1,5 @@
 import { jobQueue } from './JobQueue';
+import { v4 as uuidv4 } from 'uuid';
 import { SpiderEngine } from './scraper/SpiderEngine/index';
 import { EngineFactory } from './scraper/EngineFactory';
 import { jobCacheService } from './JobCacheService';
@@ -27,21 +28,19 @@ initializeJobCache().catch(console.error);
 // Register job processors with cache-first strategy
 jobQueue.process('diveFull', async (job) => {
   console.log(`🔍 Processing dive job ${job.id} with cache check`);
-  
+  // Extract dive request parameters
   const { request } = job.data as { request: DiveRequest };
-  
   // Check cache first for dive results
   const cachedDiveResult = await jobCacheService.checkDiveJobCache(request.url);
   if (cachedDiveResult) {
     console.log(`🚀 Cache HIT for dive job: ${request.url}`);
-    
-    await job.updateProgress({ 
-      processed: cachedDiveResult.pages?.length || 0, 
-      queued: 0, 
+    await job.updateProgress({
+      processed: cachedDiveResult.pages?.length || 0,
+      queued: 0,
       visited: cachedDiveResult.pages?.length || 0,
       status: 'Dive completed from cache'
     });
-    
+    // Skip storing cached sitemaps to avoid duplicates
     return {
       success: true,
       url: request.url,
@@ -50,7 +49,6 @@ jobQueue.process('diveFull', async (job) => {
       fromCache: true
     };
   }
-  
   console.log(`💨 Cache MISS for dive job: ${request.url} - performing fresh dive`);
   const spiderEngine = await getSpiderEngine();
   
@@ -111,8 +109,8 @@ jobQueue.process('diveFull', async (job) => {
     try {
       const { DiveService } = require('./DiveService');
       const diveService = new DiveService();
-      const sitemapId = `sitemap-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-      diveService.saveSitemap(sitemapId, result, request.url);
+      const sitemapId = uuidv4();
+      await diveService.saveSitemap(sitemapId, result, request.url);
       console.log(`🗺️ Stored sitemap in DiveService with ID: ${sitemapId}`);
     } catch (error) {
       console.error('Error storing sitemap in DiveService:', error);

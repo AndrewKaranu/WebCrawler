@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 
 // Import components (we'll create these next)
 import Sidebar from './components/Sidebar';
+import Landing from './components/Landing';
 import Dashboard from './components/Dashboard';
 import ScrapeForm from './components/ScrapeForm';
 import MassScraperForm from './components/MassScraperForm';
@@ -15,24 +16,48 @@ import JobsList from './components/JobsList';
 import Results from './components/Results';
 import CorpusManager from './components/CorpusManager';
 
-// Create dark theme
+// Create dark theme with purple accents to match dashboard
 const darkTheme = createTheme({
   palette: {
     mode: 'dark',
     primary: {
-      main: '#667eea',
+      main: '#a855f7',
     },
     secondary: {
-      main: '#764ba2',
+      main: '#c084fc',
     },
     background: {
-      default: '#1a1a2e',
-      paper: '#16213e',
+      default: 'rgba(0, 0, 0, 0.95)',
+      paper: 'rgba(0, 0, 0, 0.8)',
+    },
+    text: {
+      primary: 'rgba(255, 255, 255, 0.95)',
+      secondary: 'rgba(255, 255, 255, 0.7)',
     },
   },
   typography: {
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
+  components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        body: {
+          background: 'rgba(0, 0, 0, 0.95)',
+          '&::before': {
+            content: '""',
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'radial-gradient(circle at 20% 80%, rgba(168, 85, 247, 0.1) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(192, 132, 252, 0.1) 0%, transparent 50%)',
+            pointerEvents: 'none',
+            zIndex: -1
+          }
+        }
+      }
+    }
+  }
 });
 
 const App: React.FC = () => {
@@ -70,7 +95,13 @@ const App: React.FC = () => {
   return (
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
-      <Router>
+      <Router 
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true
+        }}
+      >
+        {/* @ts-ignore - Complex MUI sx union type */}
         <Box sx={{ display: 'flex', height: '100vh' }}>
           {/* Sidebar Navigation */}
           <Sidebar />
@@ -83,10 +114,31 @@ const App: React.FC = () => {
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
+              background: 'rgba(0, 0, 0, 0.9)',
+              position: 'relative',
+              '&::before': {
+                content: '""',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'radial-gradient(circle at 20% 80%, rgba(168, 85, 247, 0.05) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(192, 132, 252, 0.05) 0%, transparent 50%)',
+                pointerEvents: 'none',
+                zIndex: 0
+              }
             }}
           >
             {/* Top App Bar */}
-            <AppBar position="static" sx={{ zIndex: 1 }}>
+            <AppBar 
+              position="static" 
+              sx={{ 
+                zIndex: 2,
+                background: 'rgba(0, 0, 0, 0.8)',
+                backdropFilter: 'blur(10px)',
+                borderBottom: '1px solid rgba(168, 85, 247, 0.2)'
+              }}
+            >
               <Toolbar>
                 <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
                   WebCrawler
@@ -108,11 +160,14 @@ const App: React.FC = () => {
                 py: 3, 
                 overflow: 'auto',
                 display: 'flex',
-                flexDirection: 'column'
+                flexDirection: 'column',
+                position: 'relative',
+                zIndex: 1,
+                background: 'transparent'
               }}
             >
               <Routes>
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/" element={<Landing />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/scrape" element={<ScrapeForm />} />
                 <Route path="/mass-scraper" element={<MassScraperForm />} />

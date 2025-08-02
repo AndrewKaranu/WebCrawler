@@ -263,18 +263,18 @@ export class CorpusController {
           const contentPath = doc.contentPath || '';
           let size = doc.size || 0;
           
-          // Validate content path
-          try {
-            if (contentPath) {
+          // Validate content path if it's provided
+          if (contentPath) {
+            try {
               const fs = require('fs/promises');
               const stats = await fs.stat(contentPath);
               size = stats.size;
               console.log(`Verified content file at ${contentPath}, size: ${size} bytes`);
+            } catch (error) {
+              const err = error as Error;
+              console.warn(`Content file not found at ${contentPath}: ${err.message}, continuing with reference only`);
+              // Continue anyway, we'll just store the reference without size info
             }
-          } catch (error) {
-            const err = error as Error;
-            console.warn(`Content file not found at ${contentPath}: ${err.message}`);
-            // Continue anyway, we'll just store the reference
           }
 
           // Ensure document isn't already in the corpus

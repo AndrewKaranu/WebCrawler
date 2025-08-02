@@ -7,6 +7,7 @@ const BASE_DIR = path.join(process.cwd(), 'data');
 export const JOBS_DIR = path.join(BASE_DIR, 'jobs');
 export const CORPUS_BASE_DIR = path.join(BASE_DIR, 'corpus');
 export const BATCHES_DIR = path.join(BASE_DIR, 'batches');
+export const SITEMAPS_DIR = path.join(BASE_DIR, 'sitemaps');
 
 // Ensure directories exist
 export async function initStorage(): Promise<void> {
@@ -14,6 +15,8 @@ export async function initStorage(): Promise<void> {
   await fs.mkdir(JOBS_DIR, { recursive: true });
   await fs.mkdir(CORPUS_BASE_DIR, { recursive: true });
   await fs.mkdir(BATCHES_DIR, { recursive: true });
+  // Ensure sitemaps directory exists
+  await fs.mkdir(SITEMAPS_DIR, { recursive: true });
   console.log(`✅ Initialized persistent storage at ${BASE_DIR}`);
 }
 

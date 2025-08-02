@@ -333,17 +333,16 @@ class MassScraperService {
       // If batch just completed and has an associated corpus, add results to corpus
       if (oldStatus !== 'completed' && batch.status === 'completed' && batch.corpusId) {
         console.log(`Batch ${batch.id} completed, adding results to corpus ${batch.corpusId}`);
-        this.addBatchResultsToCorpus(batch.id, batch.corpusId)
-          .then(success => {
-            if (success) {
-              console.log(`Successfully added batch ${batch.id} results to corpus ${batch.corpusId}`);
-            } else {
-              console.error(`Failed to add batch ${batch.id} results to corpus ${batch.corpusId}`);
-            }
-          })
-          .catch(error => {
-            console.error(`Error adding batch results to corpus: ${error}`);
-          });
+        try {
+          const success = await this.addBatchResultsToCorpus(batch.id, batch.corpusId);
+          if (success) {
+            console.log(`Successfully added batch ${batch.id} results to corpus ${batch.corpusId}`);
+          } else {
+            console.error(`Failed to add batch ${batch.id} results to corpus ${batch.corpusId}`);
+          }
+        } catch (error) {
+          console.error(`Error adding batch results to corpus: ${error}`);
+        }
       }
     } else {
       batch.status = 'processing';
@@ -433,47 +432,65 @@ class MassScraperService {
     console.log(`addBatchResultsToCorpus invoked for batchId=${batchId}, corpusId=${corpusId}`);
     const batchResults = await this.getBatchResults(batchId);
     if (!batchResults) {
-      throw new Error(`Failed to get results for batch ${batchId}`);
+      console.error(`Failed to get results for batch ${batchId}`);
+      return false;
     }
 
-    const fs = require('fs/promises');
     const path = require('path');
+    const { JOBS_DIR } = require('./PersistentStorage');
     
     // Link to existing job storage files instead of copying content
     const completedResults = batchResults.results.filter(r => r.state === 'completed' && r.result);
     console.log(`Linking ${completedResults.length} completed results for corpus ${corpusId}`);
     
+    if (completedResults.length === 0) {
+      console.log(`No completed results found for batch ${batchId}`);
+      return true; // Not an error, just no content to add
+    }
+    
     const documents = completedResults.map(r => {
-      // Link to the existing job data JSON via public URL
-      const contentPath = `/jobs/${r.jobId}.json`;
+      // Use absolute path to the job file
+      const contentPath = path.join(JOBS_DIR, `${r.jobId}.json`);
       return {
         id: r.jobId,
-        title: r.result.title || r.url,
+        title: r.result?.title || r.result?.url || r.url || 'Untitled',
         url: r.url,
         contentPath,
-        size: 0 // size unknown; content stored within JSON file
+        size: 0 // size will be calculated in corpus controller
       };
     });
     
+    // Call corpus controller directly instead of using mock request/response
     const { corpusController } = require('../controllers/corpus');
-    const contents = {
-      documents,
-      images: []
+    
+    // Create proper mock request and response objects
+    const mockReq = {
+      params: { corpusId },
+      body: { 
+        batchId,
+        contents: {
+          documents,
+          images: []
+        }
+      }
+    };
+    
+    const mockRes = {
+      json: (data: any) => {
+        console.log(`Corpus content addition result:`, data);
+        return data;
+      },
+      status: (code: number) => ({
+        json: (data: any) => {
+          console.log(`Corpus content addition failed with status ${code}:`, data);
+          return data;
+        }
+      })
     };
 
     try {
-      const result = await corpusController.addContentFromMassScrape({
-        params: { corpusId },
-        body: { 
-          batchId,
-          contents
-        }
-      }, {
-        json: (data: any) => data,
-        status: () => ({ json: (data: any) => data })
-      });
-
-      return result.success;
+      const result = await corpusController.addContentFromMassScrape(mockReq, mockRes);
+      return result?.success === true;
     } catch (error) {
       console.error(`Failed to add batch results to corpus ${corpusId}:`, error);
       return false;

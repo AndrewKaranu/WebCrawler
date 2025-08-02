@@ -8,7 +8,7 @@ export const massScraperController = {
    * 
    * Can optionally create an associated corpus if createCorpus is set to true
    */
-  createBatch: async (req: Request, res: Response) => {
+  createBatch: async (req: Request, res: Response): Promise<void> => {
     try {
       const request: MassScrapeRequest = {
         urls: req.body.urls,
@@ -22,10 +22,11 @@ export const massScraperController = {
 
       // Validate request
       if (!request.urls || !Array.isArray(request.urls) || request.urls.length === 0) {
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           error: 'URLs array is required and cannot be empty'
         });
+        return;
       }
 
       const result = await massScraperService.createMassScrapeBatch(request);
@@ -47,16 +48,17 @@ export const massScraperController = {
    * Get batch status and progress
    * GET /api/mass-scrape/:batchId
    */
-  getBatchStatus: async (req: Request, res: Response) => {
+  getBatchStatus: async (req: Request, res: Response): Promise<void> => {
     try {
       const { batchId } = req.params;
       const batch = await massScraperService.getBatchStatus(batchId);
 
       if (!batch) {
-        return res.status(404).json({
+        res.status(404).json({
           success: false,
           error: 'Batch not found'
         });
+        return;
       }
 
       res.json({
@@ -97,16 +99,17 @@ export const massScraperController = {
    * Get batch results
    * GET /api/mass-scrape/:batchId/results
    */
-  getBatchResults: async (req: Request, res: Response) => {
+  getBatchResults: async (req: Request, res: Response): Promise<void> => {
     try {
       const { batchId } = req.params;
       const batchResults = await massScraperService.getBatchResults(batchId);
 
       if (!batchResults) {
-        return res.status(404).json({
+        res.status(404).json({
           success: false,
           error: 'Batch not found'
         });
+        return;
       }
 
       res.json({
@@ -126,28 +129,31 @@ export const massScraperController = {
    * Cancel a batch
    * DELETE /api/mass-scrape/:batchId/cancel
    */
-  cancelBatch: async (req: Request, res: Response) => {
+  cancelBatch: async (req: Request, res: Response): Promise<void> => {
     try {
       const { batchId } = req.params;
       const success = await massScraperService.cancelBatch(batchId);
 
       if (!success) {
-        return res.status(404).json({
+        res.status(404).json({
           success: false,
           error: 'Batch not found or could not be cancelled'
         });
+        return;
       }
 
       res.json({
         success: true,
         message: 'Batch cancelled successfully'
       });
+      return;
     } catch (error) {
       console.error('Error cancelling batch:', error);
       res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
       });
+      return;
     }
   },
 
@@ -155,28 +161,31 @@ export const massScraperController = {
    * Delete a batch
    * DELETE /api/mass-scrape/:batchId
    */
-  deleteBatch: async (req: Request, res: Response) => {
+  deleteBatch: async (req: Request, res: Response): Promise<void> => {
     try {
       const { batchId } = req.params;
       const success = await massScraperService.deleteBatch(batchId);
 
       if (!success) {
-        return res.status(404).json({
+        res.status(404).json({
           success: false,
           error: 'Batch not found'
         });
+        return;
       }
 
       res.json({
         success: true,
         message: 'Batch deleted successfully'
       });
+      return;
     } catch (error) {
       console.error('Error deleting batch:', error);
       res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
       });
+      return;
     }
   },
 
@@ -184,15 +193,16 @@ export const massScraperController = {
    * Create batch from dive results (for future diver integration)
    * POST /api/mass-scrape/from-dive
    */
-  createBatchFromDive: async (req: Request, res: Response) => {
+  createBatchFromDive: async (req: Request, res: Response): Promise<void> => {
     try {
       const { diveJobId, selectedUrls, batchName, options, createCorpus } = req.body;
 
       if (!diveJobId || !selectedUrls || !Array.isArray(selectedUrls)) {
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           error: 'diveJobId and selectedUrls array are required'
         });
+        return;
       }
 
       const result = await massScraperService.createBatchFromDiveResults(
@@ -207,20 +217,22 @@ export const massScraperController = {
         success: true,
         data: result
       });
+      return;
     } catch (error) {
       console.error('Error creating batch from dive:', error);
       res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
       });
+      return;
     }
   },
-  
+
   /**
    * Create a corpus from an existing batch
    * POST /api/corpus/from-batch/:batchId
    */
-  createCorpusFromBatch: async (req: Request, res: Response) => {
+  createCorpusFromBatch: async (req: Request, res: Response): Promise<void> => {
     console.log(`HTTP POST /api/corpus/from-batch/${req.params.batchId} called`);
     try {
       const { batchId } = req.params;
@@ -234,16 +246,17 @@ export const massScraperController = {
       );
       
       if (!corpusId) {
-        return res.status(404).json({
+        res.status(404).json({
           success: false,
           error: 'Batch not found or corpus creation failed'
         });
+        return;
       }
       
       // Add batch results to the corpus
       const success = await massScraperService.addBatchResultsToCorpus(batchId, corpusId);
       
-      return res.json({
+      res.json({
         success: true,
         data: { 
           corpusId,
@@ -252,12 +265,53 @@ export const massScraperController = {
         },
         message: `Corpus created from batch ${batchId}`
       });
+      return;
     } catch (error) {
       console.error('Error creating corpus from batch:', error);
-      return res.status(500).json({
+      res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
       });
+      return;
+    }
+  },
+
+  /**
+   * Manually re-link batch results to an existing corpus
+   * POST /api/corpus/:corpusId/relink/:batchId
+   */
+  relinkBatchToCorpus: async (req: Request, res: Response): Promise<void> => {
+    console.log(`HTTP POST /api/corpus/${req.params.corpusId}/relink/${req.params.batchId} called`);
+    try {
+      const { corpusId, batchId } = req.params;
+      
+      const success = await massScraperService.addBatchResultsToCorpus(batchId, corpusId);
+      
+      if (!success) {
+        res.status(400).json({
+          success: false,
+          error: 'Failed to link batch results to corpus'
+        });
+        return;
+      }
+      
+      res.json({
+        success: true,
+        data: { 
+          corpusId,
+          batchId,
+          resultsAdded: success 
+        },
+        message: `Batch ${batchId} results linked to corpus ${corpusId}`
+      });
+      return;
+    } catch (error) {
+      console.error('Error linking batch to corpus:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return;
     }
   }
 };

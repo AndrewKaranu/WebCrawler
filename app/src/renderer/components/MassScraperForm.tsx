@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import '../styles/glassmorphic.css';
 import {
   Card,
   CardContent,
@@ -17,8 +18,11 @@ import {
   ListItem,
   ListItemText,
   IconButton,
-  Divider
+  Divider,
+  Stack,
+  Container
 } from '@mui/material';
+import type { SxProps, Theme } from '@mui/material';
 import { Add, Delete, PlayArrow, Clear } from '@mui/icons-material';
 
 interface MassScraperFormProps {
@@ -48,6 +52,58 @@ interface BatchStatus {
   createdAt: string;
   corpusId?: string;
 }
+
+// Glassmorphic styling - matching Dashboard design
+const glassCardSx: SxProps<Theme> = {
+  background: 'rgba(255, 255, 255, 0.05)',
+  backdropFilter: 'blur(10px)',
+  border: '1px solid rgba(168, 85, 247, 0.2)',
+  borderRadius: '16px',
+  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+};
+
+const glassButtonSx: SxProps<Theme> = {
+  background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.8), rgba(147, 51, 234, 0.8))',
+  backdropFilter: 'blur(10px)',
+  border: '1px solid rgba(168, 85, 247, 0.3)',
+  borderRadius: '12px',
+  color: 'white',
+  fontWeight: 600,
+  textTransform: 'none',
+  fontSize: '1rem',
+  '&:hover': {
+    background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.9), rgba(147, 51, 234, 0.9))',
+    transform: 'translateY(-2px)',
+    boxShadow: '0 12px 24px rgba(168, 85, 247, 0.4)',
+  },
+  '&:disabled': {
+    background: 'rgba(168, 85, 247, 0.3)',
+    color: 'rgba(255, 255, 255, 0.5)',
+  }
+};
+
+const glassTextFieldSx: SxProps<Theme> = {
+  '& .MuiOutlinedInput-root': {
+    background: 'rgba(255, 255, 255, 0.05)',
+    backdropFilter: 'blur(10px)',
+    borderRadius: '12px',
+    '& fieldset': {
+      borderColor: 'rgba(168, 85, 247, 0.3)',
+    },
+    '&:hover fieldset': {
+      borderColor: 'rgba(168, 85, 247, 0.5)',
+    },
+    '&.Mui-focused fieldset': {
+      borderColor: 'rgba(168, 85, 247, 0.8)',
+    },
+  },
+  '& .MuiInputLabel-root': {
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  '& .MuiInputBase-input': {
+    color: 'white',
+  }
+};
 
 const MassScraperForm: React.FC<MassScraperFormProps> = ({ onBatchCreated }) => {
   const [urls, setUrls] = useState<string[]>(['']);
@@ -281,299 +337,564 @@ const MassScraperForm: React.FC<MassScraperFormProps> = ({ onBatchCreated }) => 
   };
 
   return (
-    <Box sx={{ p: 2 }}>
-      <Card>
-        <CardHeader
-          title="Mass Scraper"
-          subheader="Create batch jobs to scrape multiple URLs simultaneously"
-        />
-        <CardContent>
-          <Box sx={{ mb: 3 }}>
-            <TextField
-              fullWidth
-              label="Batch Name (Optional)"
-              value={batchName}
-              onChange={(e) => setBatchName(e.target.value)}
-              margin="normal"
-              helperText="Give your batch a descriptive name"
-            />
-          </Box>
-
-          <Typography variant="h6" gutterBottom>
-            URLs to Scrape
-            <Button 
-              size="small" 
-              onClick={clearAllUrls}
-              startIcon={<Clear />}
-              sx={{ ml: 2 }}
-            >
-              Clear All
-            </Button>
-          </Typography>
-
-          {urls.map((url, index) => (
-            <Box key={index} sx={{ display: 'flex', gap: 1, mb: 1 }}>
-              <TextField
-                fullWidth
-                label={`URL ${index + 1}`}
-                value={url}
-                onChange={(e) => updateUrl(index, e.target.value)}
-                placeholder="https://example.com"
-                error={url.trim() !== '' && (() => {
-                  try {
-                    new URL(url);
-                    return false;
-                  } catch {
-                    return true;
-                  }
-                })()}
-                helperText={url.trim() !== '' && (() => {
-                  try {
-                    new URL(url);
-                    return '';
-                  } catch {
-                    return 'Invalid URL format';
-                  }
-                })()}
-              />
-              <IconButton 
-                onClick={() => removeUrlField(index)}
-                disabled={urls.length === 1}
-                color="error"
-              >
-                <Delete />
-              </IconButton>
-            </Box>
-          ))}
-
-          <Button
-            startIcon={<Add />}
-            onClick={addUrlField}
-            sx={{ mb: 3 }}
+    <Box
+      sx={{
+        minHeight: '100vh',
+        background: 'radial-gradient(ellipse at top, rgba(168, 85, 247, 0.1) 0%, rgba(0, 0, 0, 0.8) 50%, rgba(0, 0, 0, 0.95) 100%)',
+        position: 'relative',
+        overflow: 'auto',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'radial-gradient(circle at 20% 20%, rgba(168, 85, 247, 0.15) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(147, 51, 234, 0.1) 0%, transparent 50%)',
+          pointerEvents: 'none',
+        }
+      }}
+    >
+      <Container maxWidth="lg" sx={{ py: 4, position: 'relative', zIndex: 1 }}>
+        <Stack spacing={4} alignItems="center">
+          <Typography 
+            variant="h3" 
+            component="h1" 
+            sx={{ 
+              fontWeight: 700,
+              background: 'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)',
+              backgroundClip: 'text',
+              textFillColor: 'transparent',
+              textAlign: 'center',
+              mb: 2
+            }}
           >
-            Add URL
-          </Button>
-
-          <Typography variant="h6" gutterBottom>
-            Scrape Options
+            Mass Scraper
           </Typography>
-          
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={options.screenshot || false}
-                  onChange={(e) => setOptions({...options, screenshot: e.target.checked})}
-                />
-              }
-              label="Take Screenshots"
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={options.fullPage || false}
-                  onChange={(e) => setOptions({...options, fullPage: e.target.checked})}
-                />
-              }
-              label="Full Page Screenshot"
-            />
-          </Box>
 
-          <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-            <TextField
-              label="Timeout (ms)"
-              type="number"
-              value={options.timeout || 30000}
-              onChange={(e) => setOptions({...options, timeout: parseInt(e.target.value)})}
-              sx={{ width: 150 }}
-            />
-            <TextField
-              label="Wait Time (ms)"
-              type="number"
-              value={options.waitFor || 1000}
-              onChange={(e) => setOptions({...options, waitFor: parseInt(e.target.value)})}
-              sx={{ width: 150 }}
-            />
-          </Box>
-          
-          <Divider sx={{ my: 3 }} />
-          
-          <Typography variant="h6" gutterBottom>
-            Corpus Options
-          </Typography>
-          
-          <FormControlLabel
-            control={
-              <Switch
-                checked={createCorpus}
-                onChange={(e) => setCreateCorpus(e.target.checked)}
+          <Box sx={{ width: '100%', maxWidth: 800 }}>
+            <Card sx={glassCardSx}>
+              <CardHeader
+                title="Batch Configuration"
+                subheader="Create batch jobs to scrape multiple URLs simultaneously"
+                sx={{ 
+                  '& .MuiCardHeader-title': { 
+                    color: 'white', 
+                    fontWeight: 600,
+                    fontSize: '1.25rem'
+                  },
+                  '& .MuiCardHeader-subheader': { 
+                    color: 'rgba(255, 255, 255, 0.7)' 
+                  }
+                }}
               />
-            }
-            label="Create Corpus from Results"
-          />
-          
-          {createCorpus && (
-            <Box sx={{ mt: 2 }}>
-              <TextField
-                fullWidth
-                label="Corpus Name (Optional)"
-                value={corpusName}
-                onChange={(e) => setCorpusName(e.target.value)}
-                margin="normal"
-                helperText="Leave blank to use batch name"
-              />
-              
-              <TextField
-                fullWidth
-                label="Corpus Description (Optional)"
-                value={corpusDescription}
-                onChange={(e) => setCorpusDescription(e.target.value)}
-                margin="normal"
-                multiline
-                rows={2}
-              />
-              
-              <Box sx={{ mt: 2, mb: 1 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Corpus Tags
-                </Typography>
-                
-                <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+              <CardContent sx={{ pt: 0 }}>
+                <Stack spacing={3}>
                   <TextField
-                    label="Add Tag"
-                    value={corpusTag}
-                    onChange={(e) => setCorpusTag(e.target.value)}
-                    size="small"
+                    fullWidth
+                    label="Batch Name (Optional)"
+                    value={batchName}
+                    onChange={(e) => setBatchName(e.target.value)}
+                    helperText="Give your batch a descriptive name"
+                    sx={glassTextFieldSx}
                   />
-                  <Button 
-                    variant="outlined" 
-                    onClick={addCorpusTag}
-                    disabled={corpusTag.trim() === ''}
-                  >
-                    Add
-                  </Button>
-                </Box>
-                
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  {corpusTags.map((tag) => (
-                    <Chip 
-                      key={tag} 
-                      label={tag} 
-                      onDelete={() => removeCorpusTag(tag)}
-                      size="small"
-                    />
+
+                  <Typography variant="h6" sx={{ color: 'white', fontWeight: 600 }}>
+                    URLs to Scrape
+                  </Typography>
+
+                  {urls.map((url, index) => (
+                    <Box key={index} sx={{ display: 'flex', gap: 1 }}>
+                      <TextField
+                        fullWidth
+                        label={`URL ${index + 1}`}
+                        value={url}
+                        onChange={(e) => updateUrl(index, e.target.value)}
+                        placeholder="https://example.com"
+                        error={url.trim() !== '' && (() => {
+                          try {
+                            new URL(url);
+                            return false;
+                          } catch {
+                            return true;
+                          }
+                        })()}
+                        helperText={url.trim() !== '' && (() => {
+                          try {
+                            new URL(url);
+                            return '';
+                          } catch {
+                            return 'Invalid URL format';
+                          }
+                        })()}
+                        sx={glassTextFieldSx}
+                      />
+                      <IconButton 
+                        onClick={() => removeUrlField(index)}
+                        disabled={urls.length === 1}
+                        sx={{ 
+                          color: 'rgba(239, 68, 68, 0.8)',
+                          '&:hover': {
+                            color: 'rgba(239, 68, 68, 1)',
+                            background: 'rgba(239, 68, 68, 0.1)'
+                          }
+                        }}
+                      >
+                        <Delete />
+                      </IconButton>
+                    </Box>
                   ))}
-                </Box>
-              </Box>
-            </Box>
-          )}
 
-          <Divider sx={{ my: 3 }} />
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <Button
+                      startIcon={<Add />}
+                      onClick={addUrlField}
+                      sx={{
+                        ...glassButtonSx,
+                        background: 'transparent',
+                        color: 'rgba(168, 85, 247, 0.8)',
+                        '&:hover': {
+                          background: 'rgba(168, 85, 247, 0.1)',
+                          color: 'rgba(168, 85, 247, 1)',
+                        }
+                      }}
+                    >
+                      Add URL
+                    </Button>
+                    
+                    <Button 
+                      size="small" 
+                      onClick={clearAllUrls}
+                      startIcon={<Clear />}
+                      sx={{
+                        ...glassButtonSx,
+                        background: 'transparent',
+                        color: 'rgba(239, 68, 68, 0.8)',
+                        '&:hover': {
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          color: 'rgba(239, 68, 68, 1)',
+                        }
+                      }}
+                    >
+                      Clear All
+                    </Button>
+                  </Box>
+                </Stack>
+              </CardContent>
+            </Card>
+          </Box>
 
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
-
-          {success && (
-            <Alert severity="success" sx={{ mb: 2 }}>
-              {success}
-            </Alert>
-          )}
-
-          <Button
-            variant="contained"
-            onClick={createBatch}
-            disabled={loading}
-            startIcon={<PlayArrow />}
-            size="large"
-            fullWidth
-            sx={{ mb: 3 }}
-          >
-            {loading ? 'Creating Batch...' : 'Create Batch'}
-          </Button>
-
-          {loading && <LinearProgress sx={{ mb: 2 }} />}
-        </CardContent>
-      </Card>
-
-      {/* Active Batches Section */}
-      {activeBatches.length > 0 && (
-        <Card sx={{ mt: 3 }}>
-          <CardHeader title="Active Batches" />
-          <CardContent>
-            <List>
-              {activeBatches.map((batch, index) => (
-                <React.Fragment key={batch.id}>
-                  <ListItem>
-                    <Box sx={{ width: '100%' }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                        <Typography variant="subtitle1">
-                          {batch.name}
-                        </Typography>
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                          <Chip 
-                            label={batch.status} 
-                            color={getStatusColor(batch.status) as any}
-                            size="small"
-                          />
-                          {batch.status === 'processing' && (
-                            <Button 
-                              size="small" 
-                              onClick={() => cancelBatch(batch.id)}
-                              color="warning"
-                            >
-                              Cancel
-                            </Button>
-                          )}
-                          <Button 
-                            size="small" 
-                            onClick={() => deleteBatch(batch.id)}
-                            color="error"
-                          >
-                            Delete
-                          </Button>
-                        </Box>
-                      </Box>
-                      
-                      <Box sx={{ mb: 1 }}>
-                        <Typography variant="body2" color="text.secondary">
-                          {batch.progress.completed} completed, {batch.progress.failed} failed, {batch.progress.pending} pending of {batch.progress.total} total
-                        </Typography>
-                        <LinearProgress 
-                          variant="determinate" 
-                          value={getProgressPercentage(batch.progress)}
-                          sx={{ mt: 1 }}
+          <Box sx={{ width: '100%', maxWidth: 800 }}>
+            <Card sx={glassCardSx}>
+              <CardHeader
+                title="Scrape Options"
+                sx={{ 
+                  '& .MuiCardHeader-title': { 
+                    color: 'white', 
+                    fontWeight: 600,
+                    fontSize: '1.25rem'
+                  }
+                }}
+              />
+              <CardContent sx={{ pt: 0 }}>
+                <Stack spacing={3}>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={options.screenshot || false}
+                          onChange={(e) => setOptions({...options, screenshot: e.target.checked})}
+                          sx={{
+                            '& .MuiSwitch-switchBase.Mui-checked': {
+                              color: '#a855f7',
+                            },
+                            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                              backgroundColor: '#a855f7',
+                            },
+                          }}
                         />
-                      </Box>
+                      }
+                      label="Take Screenshots"
+                      sx={{ 
+                        '& .MuiFormControlLabel-label': { 
+                          color: 'rgba(255, 255, 255, 0.9)' 
+                        } 
+                      }}
+                    />
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={options.fullPage || false}
+                          onChange={(e) => setOptions({...options, fullPage: e.target.checked})}
+                          sx={{
+                            '& .MuiSwitch-switchBase.Mui-checked': {
+                              color: '#a855f7',
+                            },
+                            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                              backgroundColor: '#a855f7',
+                            },
+                          }}
+                        />
+                      }
+                      label="Full Page Screenshot"
+                      sx={{ 
+                        '& .MuiFormControlLabel-label': { 
+                          color: 'rgba(255, 255, 255, 0.9)' 
+                        } 
+                      }}
+                    />
+                  </Box>
+
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <TextField
+                      label="Timeout (ms)"
+                      type="number"
+                      value={options.timeout || 30000}
+                      onChange={(e) => setOptions({...options, timeout: parseInt(e.target.value)})}
+                      sx={{ ...glassTextFieldSx, width: 150 }}
+                    />
+                    <TextField
+                      label="Wait Time (ms)"
+                      type="number"
+                      value={options.waitFor || 1000}
+                      onChange={(e) => setOptions({...options, waitFor: parseInt(e.target.value)})}
+                      sx={{ ...glassTextFieldSx, width: 150 }}
+                    />
+                  </Box>
+                </Stack>
+              </CardContent>
+            </Card>
+          </Box>
+
+          <Box sx={{ width: '100%', maxWidth: 800 }}>
+            <Card sx={glassCardSx}>
+              <CardHeader
+                title="Corpus Options"
+                sx={{ 
+                  '& .MuiCardHeader-title': { 
+                    color: 'white', 
+                    fontWeight: 600,
+                    fontSize: '1.25rem'
+                  }
+                }}
+              />
+              <CardContent sx={{ pt: 0 }}>
+                <Stack spacing={3}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={createCorpus}
+                        onChange={(e) => setCreateCorpus(e.target.checked)}
+                        sx={{
+                          '& .MuiSwitch-switchBase.Mui-checked': {
+                            color: '#a855f7',
+                          },
+                          '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                            backgroundColor: '#a855f7',
+                          },
+                        }}
+                      />
+                    }
+                    label="Create Corpus from Results"
+                    sx={{ 
+                      '& .MuiFormControlLabel-label': { 
+                        color: 'rgba(255, 255, 255, 0.9)' 
+                      } 
+                    }}
+                  />
+                  
+                  {createCorpus && (
+                    <Stack spacing={2}>
+                      <TextField
+                        fullWidth
+                        label="Corpus Name (Optional)"
+                        value={corpusName}
+                        onChange={(e) => setCorpusName(e.target.value)}
+                        helperText="Leave blank to use batch name"
+                        sx={glassTextFieldSx}
+                      />
                       
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Typography variant="caption" color="text.secondary">
-                          Created: {new Date(batch.createdAt).toLocaleString()}
+                      <TextField
+                        fullWidth
+                        label="Corpus Description (Optional)"
+                        value={corpusDescription}
+                        onChange={(e) => setCorpusDescription(e.target.value)}
+                        multiline
+                        rows={2}
+                        sx={glassTextFieldSx}
+                      />
+                      
+                      <Box>
+                        <Typography variant="subtitle2" sx={{ mb: 2, color: 'rgba(255, 255, 255, 0.8)' }}>
+                          Corpus Tags
                         </Typography>
                         
-                        {batch.corpusId && (
-                          <Chip
-                            label={`Corpus: ${batch.corpusId}`}
-                            color="primary"
+                        <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                          <TextField
+                            label="Add Tag"
+                            value={corpusTag}
+                            onChange={(e) => setCorpusTag(e.target.value)}
                             size="small"
-                            onClick={() => {
-                              // Navigate to corpus view
-                              window.location.href = `/#/corpus?id=${batch.corpusId}`;
-                            }}
+                            sx={glassTextFieldSx}
                           />
-                        )}
+                          <Button 
+                            variant="outlined" 
+                            onClick={addCorpusTag}
+                            disabled={corpusTag.trim() === ''}
+                            sx={{
+                              ...glassButtonSx,
+                              background: 'transparent',
+                              color: 'rgba(168, 85, 247, 0.8)',
+                              '&:hover': {
+                                background: 'rgba(168, 85, 247, 0.1)',
+                                color: 'rgba(168, 85, 247, 1)',
+                              }
+                            }}
+                          >
+                            Add
+                          </Button>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                          {corpusTags.map((tag) => (
+                            <Chip 
+                              key={tag} 
+                              label={tag} 
+                              onDelete={() => removeCorpusTag(tag)}
+                              size="small"
+                              sx={{
+                                background: 'rgba(168, 85, 247, 0.2)',
+                                color: 'white',
+                                border: '1px solid rgba(168, 85, 247, 0.3)',
+                                '& .MuiChip-deleteIcon': {
+                                  color: 'rgba(255, 255, 255, 0.7)',
+                                  '&:hover': {
+                                    color: 'white'
+                                  }
+                                }
+                              }}
+                            />
+                          ))}
+                        </Box>
                       </Box>
-                    </Box>
-                  </ListItem>
-                  {index < activeBatches.length - 1 && <Divider />}
-                </React.Fragment>
-              ))}
-            </List>
-          </CardContent>
-        </Card>
-      )}
+                    </Stack>
+                  )}
+                </Stack>
+              </CardContent>
+            </Card>
+          </Box>
+
+          <Box sx={{ width: '100%', maxWidth: 800 }}>
+            <Card sx={glassCardSx}>
+              <CardContent>
+                <Stack spacing={3}>
+                  {error && (
+                    <Alert 
+                      severity="error"
+                      sx={{
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        color: 'white',
+                        '& .MuiAlert-icon': {
+                          color: 'rgba(239, 68, 68, 0.8)'
+                        }
+                      }}
+                    >
+                      {error}
+                    </Alert>
+                  )}
+
+                  {success && (
+                    <Alert 
+                      severity="success"
+                      sx={{
+                        background: 'rgba(34, 197, 94, 0.1)',
+                        border: '1px solid rgba(34, 197, 94, 0.3)',
+                        color: 'white',
+                        '& .MuiAlert-icon': {
+                          color: 'rgba(34, 197, 94, 0.8)'
+                        }
+                      }}
+                    >
+                      {success}
+                    </Alert>
+                  )}
+
+                  <Button
+                    variant="contained"
+                    onClick={createBatch}
+                    disabled={loading}
+                    startIcon={<PlayArrow />}
+                    size="large"
+                    fullWidth
+                    sx={{
+                      ...glassButtonSx,
+                      py: 1.5,
+                      fontSize: '1.1rem'
+                    }}
+                  >
+                    {loading ? 'Creating Batch...' : 'Create Batch'}
+                  </Button>
+
+                  {loading && (
+                    <LinearProgress 
+                      sx={{
+                        background: 'rgba(168, 85, 247, 0.2)',
+                        '& .MuiLinearProgress-bar': {
+                          background: 'linear-gradient(90deg, #a855f7, #9333ea)'
+                        }
+                      }}
+                    />
+                  )}
+                </Stack>
+              </CardContent>
+            </Card>
+          </Box>
+
+          {/* Active Batches Section */}
+          {activeBatches.length > 0 && (
+            <Box sx={{ width: '100%', maxWidth: 800 }}>
+              <Card sx={glassCardSx}>
+                <CardHeader 
+                  title="Active Batches"
+                  sx={{ 
+                    '& .MuiCardHeader-title': { 
+                      color: 'white', 
+                      fontWeight: 600,
+                      fontSize: '1.25rem'
+                    }
+                  }}
+                />
+                <CardContent sx={{ pt: 0 }}>
+                  <List sx={{ p: 0 }}>
+                    {activeBatches.map((batch, index) => (
+                      <React.Fragment key={batch.id}>
+                        <ListItem sx={{ 
+                          px: 0,
+                          background: index % 2 === 0 ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
+                          borderRadius: '8px',
+                          mb: 1
+                        }}>
+                          <Box sx={{ width: '100%' }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                              <Typography variant="subtitle1" sx={{ color: 'white', fontWeight: 600 }}>
+                                {batch.name}
+                              </Typography>
+                              <Box sx={{ display: 'flex', gap: 1 }}>
+                                <Chip 
+                                  label={batch.status} 
+                                  color={getStatusColor(batch.status) as any}
+                                  size="small"
+                                  sx={{
+                                    background: `rgba(${getStatusColor(batch.status) === 'success' ? '34, 197, 94' : 
+                                                     getStatusColor(batch.status) === 'error' ? '239, 68, 68' :
+                                                     getStatusColor(batch.status) === 'info' ? '59, 130, 246' :
+                                                     '168, 85, 247'}, 0.2)`,
+                                    color: 'white',
+                                    border: `1px solid rgba(${getStatusColor(batch.status) === 'success' ? '34, 197, 94' : 
+                                                             getStatusColor(batch.status) === 'error' ? '239, 68, 68' :
+                                                             getStatusColor(batch.status) === 'info' ? '59, 130, 246' :
+                                                             '168, 85, 247'}, 0.3)`
+                                  }}
+                                />
+                                {batch.status === 'processing' && (
+                                  <Button 
+                                    size="small" 
+                                    onClick={() => cancelBatch(batch.id)}
+                                    sx={{
+                                      ...glassButtonSx,
+                                      background: 'transparent',
+                                      color: 'rgba(245, 158, 11, 0.8)',
+                                      minWidth: 'auto',
+                                      px: 2,
+                                      '&:hover': {
+                                        background: 'rgba(245, 158, 11, 0.1)',
+                                        color: 'rgba(245, 158, 11, 1)',
+                                      }
+                                    }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                )}
+                                <Button 
+                                  size="small" 
+                                  onClick={() => deleteBatch(batch.id)}
+                                  sx={{
+                                    ...glassButtonSx,
+                                    background: 'transparent',
+                                    color: 'rgba(239, 68, 68, 0.8)',
+                                    minWidth: 'auto',
+                                    px: 2,
+                                    '&:hover': {
+                                      background: 'rgba(239, 68, 68, 0.1)',
+                                      color: 'rgba(239, 68, 68, 1)',
+                                    }
+                                  }}
+                                >
+                                  Delete
+                                </Button>
+                              </Box>
+                            </Box>
+                            
+                            <Box sx={{ mb: 1 }}>
+                              <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+                                {batch.progress.completed} completed, {batch.progress.failed} failed, {batch.progress.pending} pending of {batch.progress.total} total
+                              </Typography>
+                              <LinearProgress 
+                                variant="determinate" 
+                                value={getProgressPercentage(batch.progress)}
+                                sx={{ 
+                                  mt: 1,
+                                  background: 'rgba(168, 85, 247, 0.2)',
+                                  '& .MuiLinearProgress-bar': {
+                                    background: 'linear-gradient(90deg, #a855f7, #9333ea)'
+                                  }
+                                }}
+                              />
+                            </Box>
+                            
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.6)' }}>
+                                Created: {new Date(batch.createdAt).toLocaleString()}
+                              </Typography>
+                              
+                              {batch.corpusId && (
+                                <Chip
+                                  label={`Corpus: ${batch.corpusId}`}
+                                  size="small"
+                                  onClick={() => {
+                                    // Navigate to corpus view
+                                    window.location.href = `/#/corpus?id=${batch.corpusId}`;
+                                  }}
+                                  sx={{
+                                    background: 'rgba(168, 85, 247, 0.2)',
+                                    color: 'white',
+                                    border: '1px solid rgba(168, 85, 247, 0.3)',
+                                    cursor: 'pointer',
+                                    '&:hover': {
+                                      background: 'rgba(168, 85, 247, 0.3)'
+                                    }
+                                  }}
+                                />
+                              )}
+                            </Box>
+                          </Box>
+                        </ListItem>
+                        {index < activeBatches.length - 1 && (
+                          <Divider sx={{ 
+                            borderColor: 'rgba(168, 85, 247, 0.2)',
+                            mb: 1
+                          }} />
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </List>
+                </CardContent>
+              </Card>
+            </Box>
+          )}
+        </Stack>
+      </Container>
     </Box>
   );
 };

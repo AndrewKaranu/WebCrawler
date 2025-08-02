@@ -36,28 +36,26 @@ import {
   Checkbox,
   Switch,
   FormControlLabel,
-  TableContainer,
+  TableContainer
 } from '@mui/material';
 import {
-  Search,
-  FilterList,
-  Visibility,
-  Download,
-  Delete,
-  Language,
-  Schedule,
   Storage,
-  Cached,
-  Article,
-  Image,
-  Link,
-  Speed,
   Refresh,
   ClearAll,
+  Search,
+  Download,
+  Visibility,
+  Delete,
+  Language,
+  Speed,
+  Link,
+  Image,
+  Cached,
+  Article,
   Analytics,
+  Schedule,
   PlayArrow,
-  CheckBox,
-  CheckBoxOutlineBlank,
+  FilterList
 } from '@mui/icons-material';
 
 interface CacheEntry {
@@ -656,6 +654,8 @@ const ContentBrowser: React.FC = () => {
         // If a corpus was created, link the completed batch results into it
         if (createCorpus && result.data.batchId) {
           try {
+            // wait for all jobs to finish before linking results
+            await waitForBatchCompletion(result.data.batchId);
             // Link batch results into corpus with proper name/description
             await fetch(`http://localhost:3001/api/corpus/from-batch/${result.data.batchId}`, {
               method: 'POST',
@@ -679,6 +679,25 @@ const ContentBrowser: React.FC = () => {
     }
   };
   
+  // Helper to wait until mass scrape batch completes before linking to corpus
+  const waitForBatchCompletion = async (batchId: string, interval = 2000) => {
+    while (true) {
+      try {
+        const resp = await fetch(`http://localhost:3001/api/mass-scrape/${batchId}`);
+        if (resp.ok) {
+          const json = await resp.json();
+          const prog = json.data.progress;
+          if (prog.completed >= prog.total) {
+            break;
+          }
+        }
+      } catch (e) {
+        console.warn(`Batch status fetch failed for ${batchId}:`, e);
+      }
+      await new Promise(res => setTimeout(res, interval));
+    }
+  };
+
   // Toggle URL selection for mass scraping
   const toggleUrlSelection = (url: string) => {
     setSelectedUrls(prev => {

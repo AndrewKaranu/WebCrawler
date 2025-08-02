@@ -1,20 +1,22 @@
 import { Request, Response } from 'express';
 import { CacheService } from '../services/CacheService';
+import { JOBS_DIR, listDataFiles, loadData } from '../services/PersistentStorage';
 
 export class ContentController {
   private cacheService = CacheService.getInstance();
 
   /**
    * Get all cached content entries with metadata
+   * Includes both cache entries and persistent job results
    */
   getAllContent = async (req: Request, res: Response) => {
     try {
       const { search, domain, status, sortBy = 'timestamp', order = 'desc', page = 1, limit = 20 } = req.query;
       
-      // Get all cache keys
-      const allKeys = this.cacheService.getAllKeys();
       const entries = [];
 
+      // 1. Get all cache keys
+      const allKeys = this.cacheService.getAllKeys();
       for (const key of allKeys) {
         const value = this.cacheService.getCacheValue(key);
         if (value && typeof value === 'object') {
@@ -24,6 +26,27 @@ export class ContentController {
             entries.push(entry);
           }
         }
+      }
+
+      // 2. Get all persisted job results
+      try {
+        const jobIds = await listDataFiles(JOBS_DIR);
+        for (const jobId of jobIds) {
+          const job = await loadData(JOBS_DIR, jobId) as any;
+          if (job && job.result && job.state === 'completed') {
+            // Extract content from job result
+            const entry = this.extractJobContentEntry(jobId, job);
+            if (entry) {
+              // Check if we already have this content from cache (avoid duplicates)
+              const existingEntry = entries.find(e => e.url === entry.url);
+              if (!existingEntry) {
+                entries.push(entry);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading job results:', error);
       }
 
       // Apply filters
@@ -288,6 +311,60 @@ export class ContentController {
       return null;
     } catch (error) {
       console.error('Error extracting content entry:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Extract content entry from persisted job result
+   */
+  private extractJobContentEntry(jobId: string, job: any): any {
+    try {
+      const result = job.result;
+      
+      // Handle single scrape job results
+      if (result && result.result) {
+        const scrapeResult = result.result;
+        return {
+          id: jobId,
+          url: scrapeResult.url || job.data?.url || '',
+          title: scrapeResult.title || 'Scraped Content',
+          text: scrapeResult.text || '',
+          timestamp: job.updatedAt || job.createdAt || new Date(),
+          statusCode: scrapeResult.statusCode || 200,
+          loadTime: scrapeResult.loadTime || 0,
+          contentType: scrapeResult.meta?.['content-type'] || 'text/html',
+          size: this.calculateSize(scrapeResult),
+          domain: scrapeResult.url ? new URL(scrapeResult.url).hostname : '',
+          linksCount: scrapeResult.links?.length || 0,
+          imagesCount: scrapeResult.images?.length || 0,
+          cached: false // This comes from persistent storage, not cache
+        };
+      }
+      
+      // Handle dive/sitemap job results
+      if (result && result.sitemap) {
+        const sitemap = result.sitemap;
+        return {
+          id: jobId,
+          url: result.url || sitemap.startUrl || '',
+          title: `Site Map - ${sitemap.domain || 'Unknown'}`,
+          text: `Sitemap with ${sitemap.totalPages || 0} pages`,
+          timestamp: job.updatedAt || job.createdAt || new Date(),
+          statusCode: 200,
+          loadTime: sitemap.crawlTime || 0,
+          contentType: 'application/sitemap',
+          size: this.calculateSize(sitemap),
+          domain: sitemap.domain || '',
+          linksCount: sitemap.statistics?.internalLinks || 0,
+          imagesCount: 0,
+          cached: false
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error extracting job content entry:', error);
       return null;
     }
   }

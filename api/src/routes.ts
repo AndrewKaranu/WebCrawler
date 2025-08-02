@@ -64,6 +64,9 @@ router.delete('/corpus/:corpusId', corpusController.deleteCorpus);
 // Create corpus from batch
 router.post('/corpus/from-batch/:batchId', massScraperController.createCorpusFromBatch);
 
+// Manual repair endpoint to re-link batch results to corpus
+router.post('/corpus/:corpusId/relink/:batchId', massScraperController.relinkBatchToCorpus);
+
 // Mass scraper endpoints
 router.post('/mass-scrape', massScraperController.createBatch);
 router.get('/mass-scrape', massScraperController.getAllBatches);
